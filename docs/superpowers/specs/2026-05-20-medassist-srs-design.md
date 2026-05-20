@@ -543,6 +543,151 @@ US-13 | Admin mapping thuốc-triệu chứng
 
 ---
 
+### Epic 6: Xác thực bổ sung
+
+```
+US-14 | Đăng nhập bằng email và mật khẩu
+  As a   người dùng đã có tài khoản
+  I want  đăng nhập bằng email và mật khẩu
+  So that tôi có thể truy cập hệ thống mà không cần tài khoản Google
+
+  Acceptance Criteria:
+  - [ ] Form gồm email + mật khẩu, cả hai bắt buộc
+  - [ ] Đăng nhập thành công → nhận accessToken + refreshToken → redirect /
+  - [ ] Sai email/mật khẩu → thông báo lỗi rõ ràng (không tiết lộ field nào sai)
+  - [ ] Tài khoản chưa xác thực OTP → thông báo "Vui lòng xác thực email"
+  - [ ] Hiển thị đếm ngược số lần thử còn lại khi gần đến ngưỡng khóa
+```
+
+```
+US-15 | Quên mật khẩu — Reset qua email
+  As a   người dùng quên mật khẩu
+  I want  đặt lại mật khẩu thông qua email xác nhận
+  So that tôi không mất quyền truy cập tài khoản
+
+  Acceptance Criteria:
+  - [ ] Nhấn "Quên mật khẩu" trên trang Login → trang /forgot-password
+  - [ ] Nhập email → hệ thống gửi link reset (hết hạn sau 30 phút)
+  - [ ] Nhấn link → trang /reset-password → nhập mật khẩu mới (≥ 8 ký tự)
+  - [ ] Đặt lại thành công → tự động redirect /login, hiển thị thông báo thành công
+  - [ ] Link reset chỉ dùng được 1 lần
+  - [ ] Nếu email không tồn tại → vẫn hiển thị "Nếu email hợp lệ, bạn sẽ nhận được link" (tránh user enumeration)
+```
+
+---
+
+### Epic 7: Cá nhân hóa AI
+
+```
+US-16 | AI tự động đọc hồ sơ cá nhân khi gợi ý
+  As a   người dùng đã khai báo tiền sử bệnh và dị ứng
+  I want  nhận gợi ý thuốc đã được AI điều chỉnh theo hồ sơ của tôi
+  So that kết quả phù hợp với tình trạng sức khỏe thực tế của tôi
+
+  Acceptance Criteria:
+  - [ ] Khi gọi API gợi ý, Backend tự động đính kèm history + allergies từ DB
+  - [ ] AI loại trừ thuốc có trong danh sách dị ứng (ẩn mặc định)
+  - [ ] AI ưu tiên / hạ điểm thuốc dựa trên bệnh mãn tính đang có
+  - [ ] Reason text đề cập rõ: "Không có chống chỉ định với tiền sử [tên bệnh] của bạn"
+  - [ ] Nếu người dùng chưa khai báo hồ sơ → gợi ý vẫn hoạt động (context rỗng)
+  - [ ] Thay đổi hồ sơ → lần tra cứu tiếp theo phản ánh ngay dữ liệu mới
+```
+
+---
+
+### Epic 8: Quản trị nội dung (Admin)
+
+```
+US-17 | Admin quản lý danh mục triệu chứng
+  As an  Admin
+  I want  thêm, sửa, xóa triệu chứng qua giao diện web
+  So that hệ thống NLP có đủ từ khóa để nhận diện chính xác triệu chứng người dùng nhập
+
+  Acceptance Criteria:
+  - [ ] Form thêm triệu chứng: tên VI, tên EN, mã code, từ khóa (keywords[]), is_danger toggle
+  - [ ] Sửa inline hoặc qua modal
+  - [ ] Xóa mềm (soft delete) — không xóa khỏi DB
+  - [ ] Tìm kiếm theo tên hoặc code
+  - [ ] is_danger = true → triệu chứng kích hoạt banner cảnh báo y tế
+```
+
+```
+US-18 | Admin import thuốc hàng loạt từ CSV
+  As an  Admin
+  I want  upload file CSV để nhập nhiều thuốc cùng lúc
+  So that có thể cập nhật hàng trăm thuốc nhanh chóng thay vì nhập từng cái
+
+  Acceptance Criteria:
+  - [ ] Nút "Import CSV" trong trang quản lý thuốc
+  - [ ] File CSV có header: code, name_vi, name_en, active_ingredient, drug_class, warnings, contraindications
+  - [ ] Preview 10 dòng đầu trước khi xác nhận import
+  - [ ] Validation: highlight dòng lỗi (thiếu field bắt buộc, duplicate code)
+  - [ ] Import thành công → hiển thị tóm tắt: "X thuốc thêm mới, Y thuốc cập nhật, Z dòng lỗi"
+  - [ ] Dòng lỗi không làm hỏng toàn bộ import (partial success)
+```
+
+---
+
+### Epic 9: Trải nghiệm & Giao diện
+
+```
+US-19 | Chuyển đổi Dark mode / Light mode
+  As a   người dùng
+  I want  chuyển đổi giữa giao diện tối và sáng
+  So that tôi có thể dùng thoải mái trong môi trường ánh sáng khác nhau
+
+  Acceptance Criteria:
+  - [ ] Nút toggle Dark/Light mode trên Navbar
+  - [ ] Mặc định theo system preference (prefers-color-scheme)
+  - [ ] Lưu lựa chọn vào localStorage → giữ nguyên khi reload
+  - [ ] Toàn bộ trang áp dụng theme nhất quán (không có vùng không đổi màu)
+  - [ ] Transition mượt mà (0.2s) khi chuyển đổi
+```
+
+```
+US-20 | Chuyển đổi ngôn ngữ Việt / Anh
+  As a   người dùng
+  I want  chuyển giao diện sang tiếng Anh hoặc tiếng Việt
+  So that người dùng không thành thạo tiếng Việt có thể dùng được hệ thống
+
+  Acceptance Criteria:
+  - [ ] Dropdown chọn ngôn ngữ (VI | EN) trên Navbar
+  - [ ] Toàn bộ text UI dịch sang ngôn ngữ đã chọn (labels, buttons, messages, placeholders)
+  - [ ] Tên thuốc và triệu chứng hiển thị theo ngôn ngữ đang chọn (name_vi / name_en)
+  - [ ] Lưu lựa chọn vào localStorage
+  - [ ] Mặc định: tiếng Việt
+```
+
+```
+US-21 | In-app notification
+  As a   người dùng
+  I want  nhận thông báo trong ứng dụng khi có sự kiện quan trọng
+  So that tôi không bỏ lỡ thông tin liên quan đến tài khoản hoặc tra cứu
+
+  Acceptance Criteria:
+  - [ ] Icon chuông trên Navbar với badge số khi có thông báo chưa đọc
+  - [ ] Dropdown hiển thị danh sách thông báo (mới nhất lên đầu)
+  - [ ] Các loại thông báo: đăng nhập thiết bị mới, tài khoản bị khóa, tra cứu hoàn thành
+  - [ ] Nhấn vào thông báo → đánh dấu đã đọc + redirect đến trang liên quan
+  - [ ] Nút "Đánh dấu tất cả đã đọc"
+```
+
+```
+US-22 | Disclaimer y tế hiển thị trên trang kết quả
+  As a   hệ thống (system)
+  I want  hiển thị disclaimer "không thay thế bác sĩ" trên mọi trang có kết quả gợi ý
+  So that người dùng luôn được nhắc nhở rằng thông tin chỉ mang tính tham khảo
+
+  Acceptance Criteria:
+  - [ ] Disclaimer hiển thị ở cuối mọi trang kết quả (/results/:id)
+  - [ ] Không thể ẩn hoặc bỏ qua disclaimer
+  - [ ] Nội dung đầy đủ theo SRS §10.2 (Tiếng Việt + Tiếng Anh theo ngôn ngữ đang chọn)
+  - [ ] Font nhỏ hơn (text-xs), màu xám, nền nhạt để không gây rối giao diện chính
+  - [ ] Xuất hiện trong file PDF khi export
+```
+
+---
+
 ## 7. Yêu cầu phi chức năng
 
 ### 7.1 Hiệu năng
