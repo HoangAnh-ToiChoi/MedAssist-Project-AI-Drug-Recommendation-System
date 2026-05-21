@@ -170,23 +170,71 @@ Request
 ### 2.3 Dependency Injection Pattern
 
 ```javascript
-// Ví dụ: wiring dependencies tại route layer
-const pool             = require('../config/db')
-const redisClient      = require('../config/redis')
-const userRepo         = new UserRepository(pool)
-const authService      = new AuthService(userRepo, redisClient)
-const authController   = new AuthController(authService)
+// Wiring tại entry point (app.js / route file)
+const pool           = require('../config/db')
+const redisClient    = require('../config/redis')
+const userRepo       = new UserRepository(pool)
+const authService    = new AuthService(userRepo, redisClient)
+const authController = new AuthController(authService)
 
-// Constructor injection
+// ─── REPOSITORY — #pool private, nhận qua constructor ──────────────────────
+class UserRepository {
+  #pool                                    // [Encapsulation] không ai truy cập từ ngoài
+
+  constructor(pool) {
+    this.#pool = pool                      // [DI] nhận từ ngoài, không tự new
+  }
+
+  async findActiveByEmail(email) {
+    const { rows } = await this.#pool.query(
+      'SELECT id, email, password_hash, full_name, role FROM users WHERE email = $1 AND is_active = true',
+      [email]                              // parameterized — không string concat
+    )
+    return rows[0] || null
+  }
+}
+
+// ─── SERVICE — #userRepo và #redis private, nhận qua constructor ────────────
 class AuthService {
+  #userRepo                                // [Encapsulation]
+  #redis                                   // [Encapsulation]
+
   constructor(userRepository, redisClient) {
-    this.userRepo = userRepository   // injected
-    this.redis    = redisClient      // injected
+    this.#userRepo = userRepository        // [DI]
+    this.#redis    = redisClient           // [DI]
+  }
+
+  async login(email, password) {
+    const user = await this.#userRepo.findActiveByEmail(email)
+    if (!user) throw new AppError('Email không tồn tại', 401)
+    const valid = await bcrypt.compare(password, user.password_hash)
+    if (!valid) throw new AppError('Sai mật khẩu', 401)
+    return this.#generateTokens(user)      // [Encapsulation] logic ẩn trong private method
+  }
+
+  #generateTokens(user) { /* ... */ }     // [Encapsulation] private
+}
+
+// ─── CONTROLLER — #authService private, nhận qua constructor ────────────────
+class AuthController {
+  #authService                             // [Encapsulation]
+
+  constructor(authService) {
+    this.#authService = authService        // [DI]
+  }
+
+  login = async (req, res, next) => {     // arrow function để giữ `this` context
+    try {
+      const result = await this.#authService.login(req.body.email, req.body.password)
+      res.json(ApiResponse.success(result))
+    } catch (err) {
+      next(err)
+    }
   }
 }
 ```
 
-**Lợi ích:** Dễ mock trong unit test, không có global state, rõ ràng dependencies.
+**Lợi ích:** Encapsulation đảm bảo không ai truy cập internal state từ ngoài class; DI giúp dễ mock trong test, không có global state.
 
 ### 2.4 Error Response Standard
 
@@ -461,7 +509,7 @@ sequenceDiagram
 
     User->>FE: Điền form đăng ký (fullName, email, password)
     FE->>BE: POST /api/auth/register
-    BE->>DB: SELECT * FROM users WHERE email = ?
+    BE->>DB: SELECT id, email, password_hash, full_name, role, is_verified FROM users WHERE email = $1
     DB-->>BE: null (email chưa tồn tại)
     BE->>BE: bcrypt.hash(password, 12)
     BE->>DB: INSERT INTO users (...)
@@ -473,7 +521,7 @@ sequenceDiagram
 
     User->>FE: Nhập OTP "847291"
     FE->>BE: POST /api/auth/verify-otp { email, code }
-    BE->>DB: SELECT * FROM otp_codes WHERE email=? AND code=? AND used=false AND expires_at > NOW()
+    BE->>DB: SELECT id, email, code, expires_at FROM otp_codes WHERE email=$1 AND code=$2 AND used=false AND expires_at > NOW()
     DB-->>BE: Record found
     BE->>DB: UPDATE otp_codes SET used=true
     BE->>DB: UPDATE users SET is_verified=true
@@ -494,7 +542,7 @@ sequenceDiagram
 
     User->>FE: Nhập email + password
     FE->>BE: POST /api/auth/login
-    BE->>DB: SELECT * FROM users WHERE email = ?
+    BE->>DB: SELECT id, email, password_hash, full_name, role, is_locked, locked_until, login_attempts FROM users WHERE email = $1
     DB-->>BE: user record
 
     alt user.is_locked AND locked_until > NOW()
@@ -566,7 +614,7 @@ sequenceDiagram
 
     FE->>BE: POST /api/auth/refresh { refreshToken }
     BE->>BE: jwt.verify(refreshToken, REFRESH_SECRET)
-    BE->>DB: SELECT * FROM refresh_tokens WHERE token_hash=? AND revoked=false AND expires_at > NOW()
+    BE->>DB: SELECT id, user_id, token_hash, expires_at FROM refresh_tokens WHERE token_hash=$1 AND revoked=false AND expires_at > NOW()
     DB-->>BE: Token hợp lệ
     BE->>BE: generateAccessToken(userId, role)
     BE-->>FE: 200 { accessToken: "new_token" }
@@ -734,12 +782,33 @@ Content-Security-Policy: default-src 'self'
 | `rate:auth:{ip}` | 60s | Count auth requests per IP (express-rate-limit) |
 | `rate:api:{ip}` | 60s | Count general API requests per IP |
 | `otp:attempts:{email}` | 600s | Count OTP retry attempts (max 3) |
+| `drug:{id}` | 3600s | Cache drug record theo ID (1 giờ) |
+| `recommend:{symptoms_key}` | 1800s | Cache kết quả recommend theo tập triệu chứng (30 phút) |
+| `refresh:{userId}` | 604800s | Hash của refresh token (7 ngày) |
+
+```javascript
+// Cache drug query
+await redis.setEx(`drug:${id}`, 3600, JSON.stringify(drug))
+
+// Cache recommendation — key dùng symptoms đã sort để đảm bảo cache hit
+const cacheKey = `recommend:${symptoms.sort().join('-')}`
+await redis.setEx(cacheKey, 1800, JSON.stringify(result))
+
+// Lưu refresh token hash (không lưu plain token)
+await redis.setEx(`refresh:${userId}`, 604800, tokenHash)
+```
+
+> **Lưu ý:** Recommendation cache dùng symptoms làm key — không include user context.
+> Context user (history, allergies) đã được Backend enrich trước khi gọi AI,
+> nên kết quả AI với cùng tập triệu chứng là giống nhau và có thể cache được.
 
 ### 8.2 Cache Invalidation
 
 - OTP: tự hết hạn theo TTL (10 phút)
 - Rate limit counter: tự reset mỗi phút
-- Recommendation results: **không cache** — mỗi request có context user khác nhau
+- Drug cache: tự hết hạn sau 1 giờ; bust thủ công khi admin cập nhật drug record
+- Recommendation cache: tự hết hạn sau 30 phút
+- Refresh token: tự hết hạn sau 7 ngày; xóa thủ công khi user logout (`redis.del`)
 
 ### 8.3 DB Connection Pooling
 
