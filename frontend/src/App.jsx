@@ -5,6 +5,7 @@ import SymptomInput from './pages/SymptomInput';
 import DrugSuggestion from './pages/DrugSuggestion';
 import MedicalHistory from './pages/MedicalHistory';
 import Allergies from './pages/Allergies';
+import OtpVerification from './auth/OtpVerification';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/suggestions" element={<DrugSuggestion />} />
         <Route path="/medical-history" element={<MedicalHistory />} />
         <Route path="/allergies" element={<Allergies />} />
+        <Route path="/verify-otp" element={<OtpVerification />} />
       </Routes>
     </BrowserRouter>
   );

@@ -33,7 +33,8 @@ const Register = () => {
     setLoading(true);
     try {
       await api.post('/auth/register', { fullName, email, password });
-      navigate('/');
+      // Chuyển sang trang xác thực OTP, truyền email qua state
+      navigate('/verify-otp', { state: { email } });
     } catch (err) {
       const message = err.response?.data?.message || 'Đăng ký thất bại. Vui lòng thử lại.';
       setError(message);
