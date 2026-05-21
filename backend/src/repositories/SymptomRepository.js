@@ -1,5 +1,3 @@
-const { Pool } = require('pg')
-
 class SymptomRepository {
   #pool
 
