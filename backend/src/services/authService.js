@@ -91,6 +91,37 @@ class AuthService {
     await this.#redis.del(`refresh:${userId}`)
   }
 
+  async refreshToken(token) {
+    let payload
+    try {
+      payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET)
+    } catch {
+      throw new AppError('Refresh token không hợp lệ hoặc đã hết hạn', 401, 'INVALID_REFRESH_TOKEN')
+    }
+
+    const stored = await this.#redis.get(`refresh:${payload.userId}`)
+    if (!stored || stored !== token) {
+      throw new AppError('Refresh token không hợp lệ hoặc đã hết hạn', 401, 'INVALID_REFRESH_TOKEN')
+    }
+
+    const user = await this.#userRepo.findById(payload.userId)
+    if (!user) {
+      throw new AppError('Tài khoản không tồn tại hoặc đã bị khóa', 401, 'USER_NOT_FOUND')
+    }
+
+    return this.#generateTokens(user)
+  }
+
+  async logout(token) {
+    let payload
+    try {
+      payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET, { ignoreExpiration: true })
+    } catch {
+      return
+    }
+    await this.#redis.del(`refresh:${payload.userId}`)
+  }
+
   async #generateTokens(user) {
     const accessToken = jwt.sign(
       { userId: user.id, role: user.role },

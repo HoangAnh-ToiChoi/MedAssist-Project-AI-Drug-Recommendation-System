@@ -60,6 +60,10 @@ const resetPasswordSchema = Joi.object({
   }),
 })
 
+const refreshSchema = Joi.object({
+  refreshToken: Joi.string().max(512).required().messages({ 'any.required': 'Refresh token là bắt buộc' }),
+})
+
 // Dependency injection
 const userRepo       = new UserRepository(pool)
 const authService    = new AuthService(userRepo, redisClient, emailTransporter)
@@ -69,5 +73,7 @@ router.post('/register',        authLimiter, validate(registerSchema),        au
 router.post('/login',           authLimiter, validate(loginSchema),           authController.login)
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema),  authController.forgotPassword)
 router.post('/reset-password',              validate(resetPasswordSchema),    authController.resetPassword)
+router.post('/refresh',         authLimiter, validate(refreshSchema),          authController.refresh)
+router.post('/logout',          authLimiter, validate(refreshSchema),          authController.logout)
 
 module.exports = router

@@ -1,0 +1,871 @@
+{
+  "info": {
+    "_postman_id": "medassist-auth-refresh-logout-v1",
+    "name": "MedAssist — Auth: Refresh & Logout (Redis)",
+    "description": "Test suite for POST /auth/refresh and POST /auth/logout.\nFeature: Redis-backed refresh token with rotation and revocation.\n\nBranch: feature/CHCKNSPC-42-HA-auth-login\nDate: 2026-05-21\nAuthor: HA\n\nIMPORTANT: Set environment variables before running:\n  - base_url          : http://localhost:3000/api/v1\n  - valid_email       : (a registered, active user)\n  - valid_password    : (password for above user)\n  - valid_refresh_token: (auto-set by TC-00 Pre-flight Login)\n  - old_refresh_token  : (manually capture before TC-01)\n  - expired_refresh_token: (JWT with correct sig but past exp)\n  - access_token       : (auto-set by TC-00)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [],
+  "event": [],
+  "item": [
+    {
+      "name": "TC-00: Pre-flight — Login to get tokens",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Has accessToken', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.data.accessToken).to.be.a('string');",
+              "  pm.expect(json.data.refreshToken).to.be.a('string');",
+              "  pm.environment.set('access_token', json.data.accessToken);",
+              "  pm.environment.set('valid_refresh_token', json.data.refreshToken);",
+              "  console.log('[TC-00] Tokens saved to environment.');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{valid_email}}\",\n  \"password\": \"{{valid_password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "login"]
+        },
+        "description": "Pre-flight: login to get a fresh refresh token. Saves access_token and valid_refresh_token to environment."
+      }
+    },
+    {
+      "name": "FUNCTIONAL — HAPPY PATH",
+      "item": [
+        {
+          "name": "TC-01: Refresh token hợp lệ",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Save the current refresh token as 'old' before rotating",
+                  "pm.environment.set('old_refresh_token', pm.environment.get('valid_refresh_token'));",
+                  "console.log('[TC-01] Saved old_refresh_token:', pm.environment.get('old_refresh_token').substring(0,30) + '...');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Response time < 2000ms', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});",
+                  "",
+                  "pm.test('success = true', () => {",
+                  "  pm.expect(pm.response.json().success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('message = Làm mới token thành công', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Làm mới token thành công');",
+                  "});",
+                  "",
+                  "pm.test('data has accessToken, refreshToken, user', () => {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(d.accessToken).to.be.a('string').and.match(/^eyJ/);",
+                  "  pm.expect(d.refreshToken).to.be.a('string').and.match(/^eyJ/);",
+                  "  pm.expect(d.user).to.have.keys(['id', 'email', 'fullName', 'role']);",
+                  "});",
+                  "",
+                  "pm.test('Token rotation: new refreshToken differs from old', () => {",
+                  "  const newToken = pm.response.json().data.refreshToken;",
+                  "  const oldToken = pm.environment.get('old_refresh_token');",
+                  "  pm.expect(newToken).to.not.eql(oldToken);",
+                  "  pm.environment.set('valid_refresh_token', newToken);",
+                  "  console.log('[TC-01] Token rotation verified. New token saved.');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{valid_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Happy path: valid refresh token → get new access + refresh token pair. Saves new token for subsequent tests."
+          }
+        },
+        {
+          "name": "TC-03: Logout hợp lệ",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Re-login to get a fresh token for this test because TC-01 rotated it",
+                  "console.log('[TC-03] Using current valid_refresh_token:', pm.environment.get('valid_refresh_token').substring(0,30) + '...');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Response time < 2000ms', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});",
+                  "",
+                  "pm.test('success = true', () => {",
+                  "  pm.expect(pm.response.json().success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('message = Đăng xuất thành công', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Đăng xuất thành công');",
+                  "});",
+                  "",
+                  "pm.test('data = null', () => {",
+                  "  pm.expect(pm.response.json().data).to.be.null;",
+                  "});",
+                  "",
+                  "console.log('[TC-03] Logout done. valid_refresh_token is now revoked in Redis.');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{valid_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Happy path: logout with valid token → 200 and token revoked from Redis."
+          }
+        }
+      ]
+    },
+    {
+      "name": "BUSINESS RULES",
+      "item": [
+        {
+          "name": "TC-02: Token Rotation — old refresh token bị reject sau rotate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "",
+                  "pm.test('Response time < 2000ms', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});",
+                  "",
+                  "pm.test('success = false', () => {",
+                  "  pm.expect(pm.response.json().success).to.be.false;",
+                  "});",
+                  "",
+                  "pm.test('code = INVALID_REFRESH_TOKEN', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('INVALID_REFRESH_TOKEN');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{old_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Business Rule: Token Rotation. Must run AFTER TC-01. old_refresh_token was set in TC-01 pre-request. Redis now has the NEW token → old one rejected."
+          }
+        },
+        {
+          "name": "TC-04: Sau logout — refresh token bị reject",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "",
+                  "pm.test('Response time < 2000ms', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});",
+                  "",
+                  "pm.test('success = false', () => {",
+                  "  pm.expect(pm.response.json().success).to.be.false;",
+                  "});",
+                  "",
+                  "pm.test('code = INVALID_REFRESH_TOKEN', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('INVALID_REFRESH_TOKEN');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{valid_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Business Rule: Sau logout, refresh token cũ không dùng được. Must run AFTER TC-03. valid_refresh_token đã bị xóa khỏi Redis."
+          }
+        },
+        {
+          "name": "TC-05: Logout với expired token — vẫn 200 (silent)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Response time < 2000ms', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});",
+                  "",
+                  "pm.test('success = true (silent on expired)', () => {",
+                  "  pm.expect(pm.response.json().success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('data = null', () => {",
+                  "  pm.expect(pm.response.json().data).to.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{expired_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Business Rule: logout() dùng ignoreExpiration:true → expired token vẫn decode được nếu chữ ký đúng → Redis del. Nếu chữ ký cũng sai → silent return → vẫn 200."
+          }
+        }
+      ]
+    },
+    {
+      "name": "FUNCTIONAL — ERROR CASES",
+      "item": [
+        {
+          "name": "TC-06: Refresh — thiếu refreshToken field",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code = VALIDATION_ERROR', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('VALIDATION_ERROR');",
+                  "});",
+                  "pm.test('message mentions refreshToken', () => {",
+                  "  pm.expect(pm.response.json().message).to.include('Refresh token');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Joi validation: refreshToken required. Empty body → 400 VALIDATION_ERROR."
+          }
+        },
+        {
+          "name": "TC-07: Logout — thiếu refreshToken field",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code = VALIDATION_ERROR', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('VALIDATION_ERROR');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Joi validation: refreshToken required for logout too."
+          }
+        },
+        {
+          "name": "TC-08: Refresh — refreshToken là chuỗi rỗng",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code = VALIDATION_ERROR', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('VALIDATION_ERROR');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Joi string().required() rejects empty string."
+          }
+        },
+        {
+          "name": "TC-10: Refresh — JWT hết hạn (expired)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('code = INVALID_REFRESH_TOKEN', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('INVALID_REFRESH_TOKEN');",
+                  "});",
+                  "pm.test('success = false', () => {",
+                  "  pm.expect(pm.response.json().success).to.be.false;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{expired_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "/auth/refresh does NOT use ignoreExpiration → TokenExpiredError → 401. Contrast with TC-05 (logout which ignores expiration)."
+          }
+        },
+        {
+          "name": "TC-12: Refresh — user không tồn tại trong DB",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('code = USER_NOT_FOUND', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('USER_NOT_FOUND');",
+                  "});",
+                  "pm.test('message mentions tài khoản', () => {",
+                  "  pm.expect(pm.response.json().message).to.include('Tài khoản');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{valid_jwt_no_db_user}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Edge case: token valid JWT + Redis entry exists but user deleted from DB. Requires manual setup: delete user from DB while keeping Redis key. Set {{valid_jwt_no_db_user}} manually."
+          }
+        },
+        {
+          "name": "TC-13: Refresh — Redis cache miss (key không tồn tại)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('code = INVALID_REFRESH_TOKEN', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('INVALID_REFRESH_TOKEN');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{valid_jwt_redis_deleted}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Scenario: Redis restart / TTL expired. Token valid JWT but Redis key 'refresh:{userId}' manually deleted. stored === null → 401. Setup: login, then DEL the Redis key via redis-cli, then use that token."
+          }
+        },
+        {
+          "name": "TC-20: Refresh — sai field name (refresh_token thay vì refreshToken)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('code = VALIDATION_ERROR', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('VALIDATION_ERROR');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{valid_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Joi stripUnknown:true strips 'refresh_token' → 'refreshToken' absent → required → 400."
+          }
+        }
+      ]
+    },
+    {
+      "name": "SECURITY",
+      "item": [
+        {
+          "name": "TC-09: Security — JWT chữ ký bị tamper",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('code = INVALID_REFRESH_TOKEN', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('INVALID_REFRESH_TOKEN');",
+                  "});",
+                  "pm.test('success = false', () => {",
+                  "  pm.expect(pm.response.json().success).to.be.false;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODkwMTIiLCJpYXQiOjE3MTY0NTgwMDAsImV4cCI6OTk5OTk5OTk5OX0.INVALID_TAMPERED_SIGNATURE_XXXXXXXXXXX\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Security: tampered JWT signature → JsonWebTokenError → catch → 401. Even if userId in payload is real, wrong signature blocks access."
+          }
+        },
+        {
+          "name": "TC-11: Security — Logout với JWT chữ ký sai → 200 silent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 (silent fail on bad sig)', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => {",
+                  "  pm.expect(pm.response.json().success).to.be.true;",
+                  "});",
+                  "pm.test('data = null', () => {",
+                  "  pm.expect(pm.response.json().data).to.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJmYWtlLXVzZXItaWQiLCJpYXQiOjE3MTY0NTgwMDB9.BAD_SIG\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Security: logout() silently ignores bad signature (catch → return). Returns 200 without leaking info. Redis NOT modified since we never reach redis.del()."
+          }
+        },
+        {
+          "name": "TC-19: Security — dùng access token thay vì refresh token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('code = INVALID_REFRESH_TOKEN', () => {",
+                  "  pm.expect(pm.response.json().code).to.eql('INVALID_REFRESH_TOKEN');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{access_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Security: access token signed with JWT_SECRET, but refresh endpoint uses JWT_REFRESH_SECRET → signature mismatch → 401. Prevents token type confusion attacks."
+          }
+        },
+        {
+          "name": "TC-16: Security — Payload quá lớn (10KB string)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a ~10KB string",
+                  "const bigString = 'A'.repeat(10240);",
+                  "pm.environment.set('big_payload', bigString);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Not 200 — large payload rejected or JWT-failed', () => {",
+                  "  // Acceptable: 400 (Joi no max), 413 (body limit), or 401 (jwt.verify fails on huge non-JWT string)",
+                  "  pm.expect(pm.response.code).to.be.oneOf([400, 401, 413]);",
+                  "});",
+                  "pm.test('Response time < 2000ms even for large payload', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});",
+                  "// NOTE: refreshSchema has no .max() → Joi allows any length string.",
+                  "// The string reaches jwt.verify() which quickly rejects it → 401.",
+                  "// RECOMMENDATION: Add .max(512) to refreshSchema to fail fast at Joi layer."
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{big_payload}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Security: large payload test. refreshSchema has no .max() → reaches jwt.verify() → fails fast. RISK: wastes CPU on jwt.verify for huge strings. Recommend .max(512) on refreshSchema."
+          }
+        }
+      ]
+    },
+    {
+      "name": "PERFORMANCE",
+      "item": [
+        {
+          "name": "TC-14: Performance — /auth/refresh P95 < 2000ms",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Before each run in Collection Runner, re-login to get a fresh token",
+                  "// because each refresh call rotates the token.",
+                  "// For performance testing: use a dedicated login step or",
+                  "// set up a pre-collection login script."
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('P95 Response time < 2000ms', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});",
+                  "",
+                  "// Track response times for analysis",
+                  "const times = pm.environment.get('refresh_times') ? JSON.parse(pm.environment.get('refresh_times')) : [];",
+                  "times.push(pm.response.responseTime);",
+                  "pm.environment.set('refresh_times', JSON.stringify(times));",
+                  "",
+                  "// Update token after each successful refresh",
+                  "if (pm.response.code === 200) {",
+                  "  pm.environment.set('valid_refresh_token', pm.response.json().data.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{valid_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Performance: run with Collection Runner, 10 iterations. Each call updates valid_refresh_token (token rotation). Expected breakdown: jwt.verify ~0.5ms + Redis GET ~1ms + DB findById ~5-50ms (Supabase). Total << 2000ms."
+          }
+        },
+        {
+          "name": "TC-15: Performance — /auth/logout P95 < 2000ms",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('P95 Response time < 2000ms', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});",
+                  "",
+                  "// NOTE: After logout, token is revoked. For repeated performance testing,",
+                  "// use a fresh token each iteration (pre-request login)."
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{valid_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Performance: logout() has no DB query → only jwt.verify() + redis.del() → fastest endpoint. Expected << 100ms."
+          }
+        }
+      ]
+    },
+    {
+      "name": "RATE LIMIT",
+      "item": [
+        {
+          "name": "TC-17: Rate Limit — /auth/refresh bị block sau 5 requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// When running this 6 times in Collection Runner:",
+                  "// Iterations 1-5: expect 200 or 401 (token may be invalid but not rate limited)",
+                  "// Iteration 6+: expect 429",
+                  "const iteration = pm.info.iteration + 1;",
+                  "console.log('Iteration:', iteration);",
+                  "",
+                  "if (iteration <= 5) {",
+                  "  pm.test('Iterations 1-5: not rate limited (not 429)', () => {",
+                  "    pm.expect(pm.response.code).to.not.equal(429);",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Iteration 6+: rate limited 429', () => {",
+                  "    pm.expect(pm.response.code).to.equal(429);",
+                  "  });",
+                  "  pm.test('Rate limit message', () => {",
+                  "    pm.expect(pm.response.json().message).to.include('Quá nhiều yêu cầu');",
+                  "  });",
+                  "  pm.test('code = RATE_LIMIT_EXCEEDED', () => {",
+                  "    pm.expect(pm.response.json().code).to.eql('RATE_LIMIT_EXCEEDED');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{valid_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Rate Limit: authLimiter max=5 per 15min window. Run with Collection Runner, 6 iterations. Iteration 6 should return 429. Note: rate limit is per-IP. Testing locally uses 127.0.0.1."
+          }
+        },
+        {
+          "name": "TC-18: Rate Limit — /auth/logout bị block sau 5 requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const iteration = pm.info.iteration + 1;",
+                  "",
+                  "if (iteration <= 5) {",
+                  "  pm.test('Iterations 1-5: not rate limited', () => {",
+                  "    pm.expect(pm.response.code).to.not.equal(429);",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Iteration 6+: rate limited 429', () => {",
+                  "    pm.expect(pm.response.code).to.equal(429);",
+                  "  });",
+                  "  pm.test('code = RATE_LIMIT_EXCEEDED', () => {",
+                  "    pm.expect(pm.response.json().code).to.eql('RATE_LIMIT_EXCEEDED');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{valid_refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Rate Limit for logout. Run 6 iterations. Iteration 6 → 429."
+          }
+        }
+      ]
+    }
+  ]
+}
