@@ -2,6 +2,7 @@ const express = require('express')
 const cors = require('cors')
 const errorHandler = require('./middlewares/errorHandler')
 const authRoutes = require('./routes/authRoutes')
+const symptomRoutes = require('./routes/symptomRoutes')
 
 const app = express()
 
@@ -16,6 +17,7 @@ app.use(express.urlencoded({ extended: true }))
 app.get('/health', (req, res) => res.json({ status: 'ok' }))
 
 app.use('/api/v1/auth', authRoutes)
+app.use('/api/v1/symptoms', symptomRoutes)
 
 app.use(errorHandler)
 
