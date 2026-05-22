@@ -45,6 +45,24 @@ class AuthController {
       next(err)
     }
   }
+
+  refresh = async (req, res, next) => {
+    try {
+      const result = await this.#authService.refreshToken(req.body.refreshToken)
+      res.json(ApiResponse.success(result, 'Làm mới token thành công'))
+    } catch (err) {
+      next(err)
+    }
+  }
+
+  logout = async (req, res, next) => {
+    try {
+      await this.#authService.logout(req.body.refreshToken)
+      res.json(ApiResponse.success(null, 'Đăng xuất thành công'))
+    } catch (err) {
+      next(err)
+    }
+  }
 }
 
 module.exports = AuthController
