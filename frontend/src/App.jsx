@@ -2,6 +2,8 @@
 import Login from './pages/Login';
 import Register from './pages/Register';
 import OtpVerification from './components/auth/OtpVerification'; // Sửa đúng đường dẫn
+import SymptomInput from './pages/SymptomInput';
+import Dashboard from './pages/Dashboard';
 
 function App() {
   return (
@@ -10,6 +12,8 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-otp" element={<OtpVerification />} />
+        <Route path="/symptoms" element={<SymptomInput />} />
+        <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
   );

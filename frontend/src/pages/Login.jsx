@@ -20,7 +20,7 @@ const Login = () => {
       localStorage.setItem('accessToken', response.data.accessToken);
       localStorage.setItem('refreshToken', response.data.refreshToken);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      navigate('/symptoms');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Sai email hoặc mật khẩu');
     } finally {
