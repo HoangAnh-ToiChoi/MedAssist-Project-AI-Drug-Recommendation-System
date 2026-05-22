@@ -2,7 +2,7 @@
 import axios from 'axios'
 
 // Base URL lay tu bien moi truong, fallback ve localhost
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'
 
 // Tao instance axios voi cau hinh mac dinh
 const api = axios.create({
