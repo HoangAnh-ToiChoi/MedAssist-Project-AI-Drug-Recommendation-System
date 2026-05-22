@@ -16,7 +16,7 @@ const Register = () => {
   const validate = () => {
     if (!fullName.trim()) return 'Họ và tên không được để trống';
     if (!email.trim()) return 'Email không được để trống';
-    if (password.length < 6) return 'Mật khẩu phải có ít nhất 6 ký tự';
+    if (password.length < 8) return 'Mật khẩu phải có ít nhất 8 ký tự';
     if (password !== confirmPassword) return 'Mật khẩu xác nhận không khớp';
     return null;
   };
