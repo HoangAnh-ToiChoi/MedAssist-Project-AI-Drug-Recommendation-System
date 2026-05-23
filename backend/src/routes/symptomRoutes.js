@@ -27,7 +27,7 @@ const symptomController = new SymptomController(symptomService)
 const patientHistoryRepo       = new PatientHistoryRepository(pool)
 const allergyRepo              = new AllergyRepository(pool)
 const recommendationRepo       = new RecommendationRepository(pool)
-const recommendationService    = new RecommendationService(patientHistoryRepo, allergyRepo, recommendationRepo)
+const recommendationService    = new RecommendationService(patientHistoryRepo, allergyRepo, recommendationRepo, redisClient)
 const recommendationController = new RecommendationController(recommendationService)
 
 // ── Validation schema ────────────────────────────────────────────────────────

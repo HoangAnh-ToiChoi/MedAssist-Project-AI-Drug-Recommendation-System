@@ -3,14 +3,20 @@ class RecommendationService {
   #patientHistoryRepo
   #allergyRepo
   #recommendationRepo
+  #redis
 
-  constructor(patientHistoryRepo, allergyRepo, recommendationRepo) {
+  constructor(patientHistoryRepo, allergyRepo, recommendationRepo, redis) {
     this.#patientHistoryRepo = patientHistoryRepo
     this.#allergyRepo        = allergyRepo
     this.#recommendationRepo = recommendationRepo
+    this.#redis              = redis
   }
 
   async checkSymptoms(userId, symptoms) {
+    const cacheKey = `recommend:${userId}:${[...symptoms].sort().join('-')}`
+    const cached = await this.#redis.get(cacheKey)
+    if (cached) return JSON.parse(cached)
+
     // [Tell Don't Ask] gọi đúng method có intent rõ ràng — không nhận raw rows rồi tự filter
     const [history, allergies] = await Promise.all([
       this.#patientHistoryRepo.findChronicDiseasesByUserId(userId),
@@ -18,20 +24,35 @@ class RecommendationService {
     ])
 
     const aiResult = await this.#callAiService(symptoms, history, allergies)
+    const filtered = this.#filterAllergies(aiResult.recommendations, allergies)
 
     const saved = await this.#recommendationRepo.create({
       userId,
       inputSymptoms: { symptoms, history, allergies },
-      outputDrugs:   aiResult.recommendations,
+      outputDrugs:   filtered,
       dangerAlert:   null,
       engineVersion: aiResult.engineVersion,
     })
 
-    return {
+    const result = {
       id:              saved.id,
-      recommendations: aiResult.recommendations,
+      recommendations: filtered,
       engineVersion:   aiResult.engineVersion,
     }
+
+    await this.#redis.setEx(cacheKey, 1800, JSON.stringify(result))
+    return result
+  }
+
+  #filterAllergies(recommendations, allergies) {
+    if (!allergies.length) return recommendations
+    const lowerAllergies = allergies.map(a => a.toLowerCase())
+    return recommendations.filter(drug =>
+      !lowerAllergies.some(a =>
+        drug.name.toLowerCase().includes(a) ||
+        drug.generic_name.toLowerCase().includes(a)
+      )
+    )
   }
 
   // TODO: swap body này khi AI service sẵn sàng
