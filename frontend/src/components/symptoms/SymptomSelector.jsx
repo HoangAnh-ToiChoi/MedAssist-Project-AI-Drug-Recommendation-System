@@ -90,7 +90,7 @@ const SymptomSelector = ({ selected, onAdd, onRemove }) => {
               + {symptom?.name || ''}
             </button>
           ))}
-
+          
           {filtered.length === 0 && search && (
             <button
               onClick={() => {
@@ -102,7 +102,7 @@ const SymptomSelector = ({ selected, onAdd, onRemove }) => {
               + Thêm mới "{search}"
             </button>
           )}
-
+          
           {filtered.length === 0 && !search && (
             <span className="text-xs text-gray-500 py-3 px-2 w-full text-center">Đã chọn hết triệu chứng trong danh sách phổ biến</span>
           )}
@@ -122,8 +122,8 @@ const SymptomSelector = ({ selected, onAdd, onRemove }) => {
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-[#00F0FF]/20 to-[#8A2BE2]/20 border border-[#00F0FF]/30 text-white shadow-[0_0_10px_rgba(0,240,255,0.05)]"
               >
                 💊 {symptom}
-                <button
-                  onClick={() => onRemove(symptom)}
+                <button 
+                  onClick={() => onRemove(symptom)} 
                   className="w-4 h-4 rounded-full flex items-center justify-center bg-black/40 text-gray-400 hover:text-red-400 hover:bg-black/80 transition-colors"
                 >
                   <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -1,8 +1,8 @@
-﻿// Cau hinh Axios va interceptors cho toan bo ung dung MedAssist
+// Cau hinh Axios va interceptors cho toan bo ung dung MedAssist
 import axios from 'axios'
 
-// Base URL lay tu bien moi truong, fallback ve localhost
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+// Base URL lay tu bien moi truong, fallback ve proxy path '/api/v1'
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 // Tao instance axios voi cau hinh mac dinh
 const api = axios.create({
