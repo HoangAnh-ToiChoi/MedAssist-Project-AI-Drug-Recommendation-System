@@ -55,6 +55,25 @@ class AuthController {
     }
   }
 
+  verifyOtp = async (req, res, next) => {
+    try {
+      const { email, otp } = req.body
+      const result = await this.#authService.verifyOtp(email, otp)
+      res.json(ApiResponse.success(result, 'Xác thực thành công'))
+    } catch (err) {
+      next(err)
+    }
+  }
+
+  resendOtp = async (req, res, next) => {
+    try {
+      await this.#authService.resendOtp(req.body.email)
+      res.json(ApiResponse.success(null, 'Đã gửi lại mã OTP'))
+    } catch (err) {
+      next(err)
+    }
+  }
+
   logout = async (req, res, next) => {
     try {
       await this.#authService.logout(req.body.refreshToken)
