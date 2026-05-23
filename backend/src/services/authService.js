@@ -23,12 +23,59 @@ class AuthService {
     const passwordHash = await bcrypt.hash(password, 12)
     const user = await this.#userRepo.createUser({ email, passwordHash, fullName })
 
+    await this.#sendOtp(email, user.full_name)
+
     return {
       id:        user.id,
       email:     user.email,
       fullName:  user.full_name,
       createdAt: user.created_at,
     }
+  }
+
+  async verifyOtp(email, otp) {
+    const stored = await this.#redis.get(`otp:${email}`)
+    if (!stored || stored !== otp) {
+      throw new AppError('Mã OTP không đúng hoặc đã hết hạn', 400, 'INVALID_OTP')
+    }
+
+    await this.#redis.del(`otp:${email}`)
+
+    const user = await this.#userRepo.findByEmail(email)
+    if (!user) throw new AppError('Tài khoản không tồn tại', 404, 'USER_NOT_FOUND')
+
+    return this.#generateTokens(user)
+  }
+
+  async resendOtp(email) {
+    const user = await this.#userRepo.findByEmail(email)
+    if (!user) throw new AppError('Email không tồn tại', 404, 'USER_NOT_FOUND')
+
+    await this.#sendOtp(email, user.full_name)
+  }
+
+  async #sendOtp(email, fullName) {
+    const otp = Math.floor(100000 + Math.random() * 900000).toString()
+    await this.#redis.setEx(`otp:${email}`, 10 * 60, otp)
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('\n[DEV] ─────────────────────────────')
+      console.log('[DEV] OTP cho:', email)
+      console.log('[DEV] Mã OTP: ', otp)
+      console.log('[DEV] ─────────────────────────────\n')
+      return
+    }
+
+    await this.#emailTransporter.sendMail({
+      from:    process.env.EMAIL_FROM,
+      to:      email,
+      subject: '[MedAssist] Mã xác thực tài khoản',
+      html: `
+        <p>Chào <strong>${fullName}</strong>,</p>
+        <p>Mã xác thực của bạn là: <strong style="font-size:24px">${otp}</strong></p>
+        <p>Mã có hiệu lực trong <strong>10 phút</strong>.</p>
+      `,
+    })
   }
 
   async login(email, password) {

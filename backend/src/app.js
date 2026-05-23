@@ -6,8 +6,19 @@ const symptomRoutes = require('./routes/symptomRoutes')
 
 const app = express()
 
+const allowedOrigin = (origin, callback) => {
+  if (!origin) return callback(null, true)
+  if (process.env.NODE_ENV === 'development' && /^http:\/\/localhost:\d+$/.test(origin)) {
+    return callback(null, true)
+  }
+  if (origin === (process.env.FRONTEND_URL || 'http://localhost:5173')) {
+    return callback(null, true)
+  }
+  callback(new Error('Not allowed by CORS'))
+}
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: allowedOrigin,
   credentials: true,
 }))
 

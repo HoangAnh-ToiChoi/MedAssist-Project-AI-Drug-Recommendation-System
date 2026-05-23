@@ -1,36 +1,73 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply font-sans text-gray-900 antialiased;
+    @apply font-sans text-gray-100 antialiased bg-[#0B0B0C] min-h-screen overflow-x-hidden;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-semibold;
+    @apply font-semibold tracking-tight;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0B0B0C;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
   }
 }
 
 @layer components {
-  /* Lop tien ich dung chung */
-  .btn-primary {
-    @apply bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors duration-200 font-medium;
+  /* Glassmorphism Card */
+  .glass-card {
+    background: rgba(20, 20, 23, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   }
 
-  .btn-secondary {
-    @apply bg-secondary text-white px-4 py-2 rounded-lg hover:bg-secondary-600 transition-colors duration-200 font-medium;
-  }
-
-  .btn-outline {
-    @apply border border-primary text-primary px-4 py-2 rounded-lg hover:bg-primary hover:text-white transition-colors duration-200 font-medium;
-  }
-
+  /* Neon Border Input */
   .input-field {
-    @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200;
+    @apply w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#00F0FF]/50 focus:border-transparent transition-all duration-200;
   }
 
-  .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+  /* Glow Orbs */
+  .bg-glow-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(130px);
+    opacity: 0.15;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Neon Gradients Text */
+  .text-gradient-neon {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#00F0FF] via-[#8A2BE2] to-[#FF007F];
+  }
+
+  .text-gradient-blue-purple {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#00F0FF] to-[#8A2BE2];
+  }
+
+  /* Glow Button styles */
+  .btn-gradient {
+    @apply relative overflow-hidden bg-gradient-to-r from-[#00F0FF] to-[#8A2BE2] text-white font-medium rounded-xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] active:scale-[0.98];
+  }
+
+  .btn-neon-outline {
+    @apply border border-[#00F0FF]/30 text-white hover:bg-[#00F0FF]/10 rounded-xl font-medium transition-all duration-300 hover:border-[#00F0FF] hover:shadow-[0_0_15px_rgba(0,240,255,0.2)];
   }
 }

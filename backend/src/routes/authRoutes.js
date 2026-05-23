@@ -12,7 +12,7 @@ const emailTransporter = require('../config/email')
 const router = Router()
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 30 * 1000,
   max: 5,
   message: { success: false, message: 'Quá nhiều yêu cầu, vui lòng thử lại sau 15 phút', code: 'RATE_LIMIT_EXCEEDED' },
   standardHeaders: true,
@@ -69,7 +69,21 @@ const userRepo       = new UserRepository(pool)
 const authService    = new AuthService(userRepo, redisClient, emailTransporter)
 const authController = new AuthController(authService)
 
+const verifyOtpSchema = Joi.object({
+  email: Joi.string().email().required(),
+  otp:   Joi.string().length(6).pattern(/^\d+$/).required().messages({
+    'string.length':  'Mã OTP gồm 6 chữ số',
+    'string.pattern': 'Mã OTP chỉ gồm chữ số',
+  }),
+})
+
+const resendOtpSchema = Joi.object({
+  email: Joi.string().email().required(),
+})
+
 router.post('/register',        authLimiter, validate(registerSchema),        authController.register)
+router.post('/verify-otp',      authLimiter, validate(verifyOtpSchema),       authController.verifyOtp)
+router.post('/resend-otp',      authLimiter, validate(resendOtpSchema),       authController.resendOtp)
 router.post('/login',           authLimiter, validate(loginSchema),           authController.login)
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema),  authController.forgotPassword)
 router.post('/reset-password',              validate(resetPasswordSchema),    authController.resetPassword)
