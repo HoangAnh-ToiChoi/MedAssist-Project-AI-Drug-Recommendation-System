@@ -5,12 +5,21 @@ class PatientHistoryRepository {
     this.#pool = pool
   }
 
-  async findAllByUserId(userId) {
+  // [Tell Don't Ask] query đúng entry_type ngay tại Repository, không trả all rồi để Service filter
+  async findChronicDiseasesByUserId(userId) {
     const { rows } = await this.#pool.query(
-      'SELECT entry_type, title FROM patient_history WHERE user_id = $1',
+      "SELECT title FROM patient_history WHERE user_id = $1 AND entry_type = 'chronic_disease'",
       [userId]
     )
-    return rows
+    return rows.map(r => r.title)
+  }
+
+  async findCurrentMedicationsByUserId(userId) {
+    const { rows } = await this.#pool.query(
+      "SELECT title FROM patient_history WHERE user_id = $1 AND entry_type = 'current_medication'",
+      [userId]
+    )
+    return rows.map(r => r.title)
   }
 }
 

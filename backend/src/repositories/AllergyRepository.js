@@ -10,7 +10,7 @@ class AllergyRepository {
       'SELECT drug_name FROM allergies WHERE user_id = $1',
       [userId]
     )
-    return rows
+    return rows.map(r => r.drug_name)
   }
 }
 

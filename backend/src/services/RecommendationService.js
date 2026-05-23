@@ -6,28 +6,25 @@ class RecommendationService {
 
   constructor(patientHistoryRepo, allergyRepo, recommendationRepo) {
     this.#patientHistoryRepo = patientHistoryRepo
-    this.#allergyRepo = allergyRepo
+    this.#allergyRepo        = allergyRepo
     this.#recommendationRepo = recommendationRepo
   }
 
   async checkSymptoms(userId, symptoms) {
-    const [historyRows, allergyRows] = await Promise.all([
-      this.#patientHistoryRepo.findAllByUserId(userId),
+    // [Tell Don't Ask] gọi đúng method có intent rõ ràng — không nhận raw rows rồi tự filter
+    const [history, allergies] = await Promise.all([
+      this.#patientHistoryRepo.findChronicDiseasesByUserId(userId),
       this.#allergyRepo.findAllByUserId(userId),
     ])
 
-    const history     = historyRows.filter(r => r.entry_type === 'chronic_disease').map(r => r.title)
-    const medications = historyRows.filter(r => r.entry_type === 'current_medication').map(r => r.title)
-    const allergies   = allergyRows.map(r => r.drug_name)
-
-    const aiResult = await this.#callAiService(symptoms, history, medications, allergies)
+    const aiResult = await this.#callAiService(symptoms, history, allergies)
 
     const saved = await this.#recommendationRepo.create({
       userId,
-      inputSymptoms:  { symptoms, history, medications, allergies },
-      outputDrugs:    aiResult.recommendations,
-      dangerAlert:    null,
-      engineVersion:  aiResult.engineVersion,
+      inputSymptoms: { symptoms, history, allergies },
+      outputDrugs:   aiResult.recommendations,
+      dangerAlert:   null,
+      engineVersion: aiResult.engineVersion,
     })
 
     return {
@@ -38,7 +35,9 @@ class RecommendationService {
   }
 
   // TODO: swap body này khi AI service sẵn sàng
-  async #callAiService(symptoms, history, medications, allergies) {
+  // Contract: { symptoms: string[], history: string[], allergies: string[] }
+  // per docs/api-contracts/be-ai-contract.md
+  async #callAiService(symptoms, history, allergies) {
     return {
       engineVersion: 'mock-v0',
       recommendations: [
