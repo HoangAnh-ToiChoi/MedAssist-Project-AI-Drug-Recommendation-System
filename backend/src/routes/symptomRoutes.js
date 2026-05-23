@@ -32,7 +32,7 @@ const recommendationController = new RecommendationController(recommendationServ
 
 // ── Validation schema ────────────────────────────────────────────────────────
 const checkSchema = Joi.object({
-  symptoms: Joi.array().items(Joi.string().trim()).min(1).required().messages({
+  symptoms: Joi.array().items(Joi.string().trim().min(1)).min(1).required().messages({
     'array.min':    'Vui lòng chọn ít nhất một triệu chứng',
     'array.base':   'symptoms phải là mảng',
     'any.required': 'Danh sách triệu chứng là bắt buộc',
