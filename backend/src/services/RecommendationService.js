@@ -11,8 +11,10 @@ class RecommendationService {
   }
 
   async checkSymptoms(userId, symptoms) {
-    const historyRows = await this.#patientHistoryRepo.findAllByUserId(userId)
-    const allergyRows = await this.#allergyRepo.findAllByUserId(userId)
+    const [historyRows, allergyRows] = await Promise.all([
+      this.#patientHistoryRepo.findAllByUserId(userId),
+      this.#allergyRepo.findAllByUserId(userId),
+    ])
 
     const history     = historyRows.filter(r => r.entry_type === 'chronic_disease').map(r => r.title)
     const medications = historyRows.filter(r => r.entry_type === 'current_medication').map(r => r.title)
@@ -23,7 +25,7 @@ class RecommendationService {
     const saved = await this.#recommendationRepo.create({
       userId,
       inputSymptoms:  { symptoms, history, medications, allergies },
-      outputDrugs:    aiResult,
+      outputDrugs:    aiResult.recommendations,
       dangerAlert:    null,
       engineVersion:  aiResult.engineVersion,
     })
