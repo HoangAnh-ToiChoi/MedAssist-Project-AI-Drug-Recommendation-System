@@ -1,0 +1,928 @@
+{
+  "info": {
+    "_postman_id": "chcknspc-55-redis-cache-ttl-1h-v1",
+    "name": "MedAssist — CHCKNSPC-55: Redis Cache TTL 1h (Symptoms Check)",
+    "description": "Test suite for POST /api/v1/symptoms/check.\nFeature: Tăng TTL Redis cache kết quả gợi ý thuốc từ 1800s (30 phút) → 3600s (1 giờ).\n\nBranch: feature/CHCKNSPC-55-HA-api-symptoms-check\nDate: 2026-05-24\nAuthor: HA\n\nIMPORTANT: Set environment variables before running:\n  - base_url            : http://localhost:3000/api/v1\n  - valid_email         : (a registered, active user)\n  - valid_password      : (password for above user)\n  - access_token        : (auto-set by TC-00 Pre-flight Login)\n  - user_id             : (auto-set by TC-00)\n  - redis_host          : localhost\n  - redis_port          : 6379\n\nRun order: TC-00 → TC-01 → TC-02 → ... → TC-22\nAll tests will SKIP if server is not running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000/api/v1", "type": "string" },
+    { "key": "access_token", "value": "", "type": "string" },
+    { "key": "user_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "TC-00: Pre-flight — Login to get access token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Has accessToken', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.success).to.be.true;",
+              "  pm.expect(json.data.accessToken).to.be.a('string');",
+              "  pm.environment.set('access_token', json.data.accessToken);",
+              "  pm.environment.set('user_id', json.data.user.id);",
+              "  console.log('[TC-00] access_token saved. user_id:', json.data.user.id);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{valid_email}}\",\n  \"password\": \"{{valid_password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "login"]
+        },
+        "description": "Pre-flight: đăng nhập để lấy access_token hợp lệ. Lưu access_token và user_id vào environment."
+      }
+    },
+    {
+      "name": "FUNCTIONAL — HAPPY PATH",
+      "item": [
+        {
+          "name": "TC-01: Check symptoms hợp lệ — 1 triệu chứng",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "pm.test('message = Gợi ý thuốc thành công', () => {",
+                  "  pm.expect(pm.response.json().message).to.equal('Gợi ý thuốc thành công');",
+                  "});",
+                  "pm.test('data.recommendations là mảng', () => {",
+                  "  pm.expect(pm.response.json().data.recommendations).to.be.an('array');",
+                  "});",
+                  "pm.test('data.id tồn tại (recommendation đã được lưu vào DB)', () => {",
+                  "  pm.expect(pm.response.json().data.id).to.exist;",
+                  "});",
+                  "pm.test('data.engineVersion tồn tại', () => {",
+                  "  pm.expect(pm.response.json().data.engineVersion).to.be.a('string');",
+                  "});",
+                  "pm.environment.set('tc01_first_id', pm.response.json().data.id);",
+                  "console.log('[TC-01] Response time:', pm.response.responseTime + 'ms');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Happy path: 1 triệu chứng hợp lệ. Kỳ vọng: 200, recommendations array, id, engineVersion."
+          }
+        },
+        {
+          "name": "TC-02: Check symptoms hợp lệ — nhiều triệu chứng",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "pm.test('recommendations là mảng không rỗng', () => {",
+                  "  const recs = pm.response.json().data.recommendations;",
+                  "  pm.expect(recs).to.be.an('array').and.to.have.length.greaterThan(0);",
+                  "});",
+                  "pm.test('Mỗi recommendation có đủ field bắt buộc', () => {",
+                  "  const recs = pm.response.json().data.recommendations;",
+                  "  recs.forEach(r => {",
+                  "    pm.expect(r).to.have.property('name');",
+                  "    pm.expect(r).to.have.property('generic_name');",
+                  "    pm.expect(r).to.have.property('confidence');",
+                  "    pm.expect(r).to.have.property('reason');",
+                  "  });",
+                  "});",
+                  "console.log('[TC-02] recommendations count:', pm.response.json().data.recommendations.length);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\", \"dau_dau\", \"ho\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Happy path: 3 triệu chứng sot + dau_dau + ho. Kỳ vọng: recommendations không rỗng, mỗi item có name/generic_name/confidence/reason."
+          }
+        },
+        {
+          "name": "TC-03: Cache hit — gọi lần 2 cùng symptoms trả về nhanh hơn ≥ 50%",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Gọi lần 1 trước (cache miss) — lưu thời gian",
+                  "// Lần 2 sẽ được đo bởi test script này",
+                  "const t1 = pm.environment.get('tc03_first_call_time');",
+                  "if (!t1) {",
+                  "  console.log('[TC-03] Lần 1 chưa có — chạy TC-03 lần đầu để tạo cache.');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const currentTime = pm.response.responseTime;",
+                  "const firstCallTime = parseInt(pm.environment.get('tc03_first_call_time') || '0');",
+                  "",
+                  "if (firstCallTime === 0) {",
+                  "  pm.environment.set('tc03_first_call_time', currentTime.toString());",
+                  "  console.log('[TC-03] Lần 1 (cache miss):', currentTime + 'ms. Chạy lại TC-03 để test cache hit.');",
+                  "  pm.test('Lần 1: ghi nhận thời gian cache miss', () => pm.expect(currentTime).to.be.above(0));",
+                  "} else {",
+                  "  console.log('[TC-03] Lần 1:', firstCallTime + 'ms | Lần 2 (cache hit):', currentTime + 'ms');",
+                  "  pm.test('Cache hit nhanh hơn ≥ 50% so với cache miss', () => {",
+                  "    pm.expect(currentTime).to.be.lessThan(firstCallTime * 0.5);",
+                  "  });",
+                  "  pm.environment.unset('tc03_first_call_time');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\", \"dau_dau\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Cache hit test: gọi 2 lần cùng symptoms. Lần 2 phải nhanh hơn ≥ 50% so với lần 1.\nCHÚ Ý: Chạy test này 2 lần liên tiếp. Lần 1 ghi nhận cache miss time, lần 2 so sánh cache hit time.\nVerify bằng redis-cli: TTL recommend:{{user_id}}:dau_dau-sot (symptoms sorted) phải ≤ 3600 và > 0."
+          }
+        },
+        {
+          "name": "TC-04: Cache key không phụ thuộc thứ tự symptoms",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "// Nếu TC-02 đã tạo cache cho ['sot','dau_dau','ho'], request này",
+                  "// với thứ tự khác ['ho','sot','dau_dau'] phải trả về cùng cache hit.",
+                  "// Verify: response time của TC-04 phải tương tự TC-02 lần 2 (cache hit)",
+                  "pm.test('Recommendations không rỗng (cache hit từ TC-02)', () => {",
+                  "  pm.expect(pm.response.json().data.recommendations).to.be.an('array').and.to.have.length.greaterThan(0);",
+                  "});",
+                  "console.log('[TC-04] Response time (kỳ vọng cache hit):', pm.response.responseTime + 'ms');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"ho\", \"sot\", \"dau_dau\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Symptoms order-independent cache: ['ho','sot','dau_dau'] phải hit cùng cache key với ['sot','dau_dau','ho'] do Service dùng .sort().join('-')."
+          }
+        },
+        {
+          "name": "TC-05: GET /symptoms — Lấy danh sách triệu chứng",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('data là mảng', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/symptoms",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms"]
+            },
+            "description": "Lấy danh sách triệu chứng để biết symptom key hợp lệ dùng trong test."
+          }
+        }
+      ]
+    },
+    {
+      "name": "FUNCTIONAL — ERROR CASES",
+      "item": [
+        {
+          "name": "TC-06: symptoms rỗng [] → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('success = false', () => pm.expect(pm.response.json().success).to.be.false);",
+                  "pm.test('message chứa thông báo validation', () => {",
+                  "  pm.expect(pm.response.json().message).to.be.a('string').and.to.have.length.greaterThan(0);",
+                  "});",
+                  "console.log('[TC-06] message:', pm.response.json().message);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Business rule: cần ít nhất 1 symptom. Joi schema có .min(1) → 400 VALIDATION_ERROR."
+          }
+        },
+        {
+          "name": "TC-07: Missing field symptoms → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('success = false', () => pm.expect(pm.response.json().success).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "symptoms field bị thiếu hoàn toàn. Joi 'any.required' → 400."
+          }
+        },
+        {
+          "name": "TC-08: symptoms không phải mảng → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('success = false', () => pm.expect(pm.response.json().success).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": \"sot\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "symptoms là string thay vì array. Joi 'array.base' → 400."
+          }
+        },
+        {
+          "name": "TC-09: symptoms chứa chuỗi rỗng → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('success = false', () => pm.expect(pm.response.json().success).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "symptoms chứa empty string. Joi .min(1) trên từng item → 400."
+          }
+        },
+        {
+          "name": "TC-10: Không có Authorization header → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('success = false', () => pm.expect(pm.response.json().success).to.be.false);",
+                  "pm.test('code = UNAUTHORIZED', () => pm.expect(pm.response.json().code).to.equal('UNAUTHORIZED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Không có Authorization header. Middleware auth.js trả UNAUTHORIZED 401."
+          }
+        },
+        {
+          "name": "TC-11: Authorization: Bearer null → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('success = false', () => pm.expect(pm.response.json().success).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer null" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Token là chuỗi 'null'. jwt.verify sẽ throw JsonWebTokenError → 401 INVALID_TOKEN."
+          }
+        },
+        {
+          "name": "TC-12: JWT bị tampered → 401 INVALID_TOKEN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('code = INVALID_TOKEN', () => pm.expect(pm.response.json().code).to.equal('INVALID_TOKEN'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxMjMiLCJyb2xlIjoidXNlciIsImlhdCI6MTcxNjU2MDAwMH0.TAMPERED_SIGNATURE_INVALID" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "JWT có chữ ký sai. jwt.verify throw JsonWebTokenError → errorHandler trả 401 INVALID_TOKEN."
+          }
+        },
+        {
+          "name": "TC-13: JWT hết hạn → 401 TOKEN_EXPIRED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('code = TOKEN_EXPIRED', () => pm.expect(pm.response.json().code).to.equal('TOKEN_EXPIRED'));",
+                  "console.log('[TC-13] NOTE: Dùng token đã tạo với exp trong quá khứ. Tạo bằng: jwt.sign({userId:\"test\"}, secret, {expiresIn: -1})');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{expired_access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "JWT đã hết hạn. jwt.verify throw TokenExpiredError → errorHandler trả 401 TOKEN_EXPIRED.\nTạo expired token: const jwt = require('jsonwebtoken'); jwt.sign({userId:'test',role:'user'}, process.env.JWT_SECRET, {expiresIn: -1})"
+          }
+        }
+      ]
+    },
+    {
+      "name": "PERFORMANCE TESTS",
+      "item": [
+        {
+          "name": "TC-14: Response time < 2000ms (P95) — cache miss first call",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Dùng symptom unique để tránh cache từ test trước",
+                  "const unique = 'tc14_perf_' + Date.now();",
+                  "pm.environment.set('tc14_unique_symptom', unique);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 2000ms (P95 non-cache)', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});",
+                  "console.log('[TC-14] Response time:', pm.response.responseTime + 'ms');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Performance SLA: response time < 2000ms kể cả khi cache miss (first call). Đây là P95 target cho non-cache path."
+          }
+        },
+        {
+          "name": "TC-15: /symptoms/check < 3000ms — với AI service call",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response time < 3000ms (kể cả AI call)', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});",
+                  "console.log('[TC-15] Response time (với AI call):', pm.response.responseTime + 'ms');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\", \"ho\", \"kho_tho\", \"dau_nguc\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Performance SLA với AI call thật (khi AI_SERVICE_URL được set). < 3000ms bao gồm DB query + AI call + Redis write."
+          }
+        },
+        {
+          "name": "TC-16: Cache hit response time < 200ms",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Cache hit response time < 200ms', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(200);",
+                  "});",
+                  "console.log('[TC-16] Cache hit response time:', pm.response.responseTime + 'ms');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\", \"dau_dau\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Cache hit (sau khi TC-02/TC-03 đã warm cache). Kỳ vọng < 200ms vì chỉ Redis GET + JSON.parse."
+          }
+        }
+      ]
+    },
+    {
+      "name": "ACCURACY TESTS",
+      "item": [
+        {
+          "name": "TC-17: Confidence score đầu tiên ≥ 0.6",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Confidence score đầu tiên ≥ 0.6', () => {",
+                  "  const recs = pm.response.json().data.recommendations;",
+                  "  pm.expect(recs).to.be.an('array').and.to.have.length.greaterThan(0);",
+                  "  pm.expect(recs[0].confidence).to.be.at.least(0.6);",
+                  "});",
+                  "console.log('[TC-17] Top confidence:', pm.response.json().data.recommendations[0]?.confidence);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\", \"dau_dau\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Accuracy: recommendation đầu tiên phải có confidence ≥ 0.6. Mock trả 0.90 cho Paracetamol."
+          }
+        },
+        {
+          "name": "TC-18: Tất cả confidence trong khoảng [0, 1]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tất cả confidence trong [0, 1]', () => {",
+                  "  const recs = pm.response.json().data.recommendations;",
+                  "  recs.forEach((r, i) => {",
+                  "    pm.expect(r.confidence, `Rec[${i}] confidence out of range`).to.be.at.least(0).and.at.most(1);",
+                  "  });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\", \"dau_dau\", \"ho\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Schema validation: confidence phải từ 0.0 đến 1.0. Validate tất cả phần tử trong recommendations array."
+          }
+        },
+        {
+          "name": "TC-19: Allergy filter — thuốc bị dị ứng không xuất hiện trong kết quả",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Pre-condition: user cần có allergy 'Paracetamol' trong DB.",
+                  "// Thêm allergy trước qua POST /api/v1/allergies (nếu có endpoint).",
+                  "// Hoặc seed trực tiếp vào DB: INSERT INTO allergies (user_id, drug_name) VALUES ({{user_id}}, 'Paracetamol')",
+                  "console.log('[TC-19] PRE-CONDITION: Ensure user has allergy Paracetamol in DB before running.');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Thuốc Paracetamol không có trong kết quả (đã bị filter)', () => {",
+                  "  const recs = pm.response.json().data.recommendations;",
+                  "  const hasPara = recs.some(r =>",
+                  "    r.name.toLowerCase().includes('paracetamol') ||",
+                  "    r.generic_name.toLowerCase().includes('paracetamol')",
+                  "  );",
+                  "  pm.expect(hasPara, 'Paracetamol bị dị ứng nhưng vẫn xuất hiện trong kết quả').to.be.false;",
+                  "});",
+                  "console.log('[TC-19] Filtered recommendations:', pm.response.json().data.recommendations.map(r => r.name));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\", \"dau_dau\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Business rule: thuốc user dị ứng phải bị lọc ra.\nPre-condition: seed allergy 'Paracetamol' cho user đang test.\nMock AI trả Paracetamol (confidence 0.90) → sau filter không được xuất hiện.\nNOTE: Invalidate cache trước khi chạy test này (FLUSHDB hoặc DEL recommend:*)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "SECURITY EDGE CASES",
+      "item": [
+        {
+          "name": "TC-20: SQL injection trong symptoms → không crash server",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Server có thể trả 200 (nếu treat như symptom string bình thường) hoặc 400 (nếu validate reject)",
+                  "// Quan trọng: KHÔNG được trả 500 INTERNAL_ERROR và KHÔNG được execute SQL.",
+                  "pm.test('Server không crash (không phải 500)', () => {",
+                  "  pm.expect(pm.response.code).to.not.equal(500);",
+                  "});",
+                  "pm.test('Response có success field', () => {",
+                  "  pm.expect(pm.response.json()).to.have.property('success');",
+                  "});",
+                  "console.log('[TC-20] Status:', pm.response.code, '| Server không crash khi nhận SQL injection input.');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot'; DROP TABLE users; --\", \"1 OR 1=1\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "SQL injection test. symptoms được pass thẳng vào AI service (không query DB trực tiếp với symptoms), nhưng phải đảm bảo không crash. Parameterized queries trong Repository ngăn SQL injection. Server không được trả 500."
+          }
+        },
+        {
+          "name": "TC-21: Payload > 1MB → 413 hoặc bị reject",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Tạo payload lớn hơn 1MB",
+                  "const bigSymptom = 'a'.repeat(1024);",
+                  "const symptoms = Array(1100).fill(bigSymptom);",
+                  "pm.variables.set('large_payload', JSON.stringify({ symptoms }));",
+                  "console.log('[TC-21] Payload size (approx):', Math.round(JSON.stringify({ symptoms }).length / 1024) + 'KB');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Express config: app.use(express.json({ limit: '1mb' })) → 413 Payload Too Large",
+                  "pm.test('Status 413 (Payload Too Large) hoặc 400', () => {",
+                  "  pm.expect([400, 413]).to.include(pm.response.code);",
+                  "});",
+                  "pm.test('Server không trả 500', () => pm.expect(pm.response.code).to.not.equal(500));",
+                  "console.log('[TC-21] Status:', pm.response.code);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{large_payload}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "Payload lớn hơn 1MB. Express đã config express.json({ limit: '1mb' }) → 413 Payload Too Large. Server không được crash với 500."
+          }
+        },
+        {
+          "name": "TC-22: Verify Redis TTL = 3600s sau khi cache được ghi",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Recommendation được trả thành công', () => {",
+                  "  pm.expect(pm.response.json().data.recommendations).to.be.an('array');",
+                  "});",
+                  "// Sau khi test này pass, verify TTL bằng tay trong redis-cli:",
+                  "// redis-cli TTL \"recommend:{{user_id}}:sot-viemnhothao\"",
+                  "// Kết quả phải là một số trong khoảng (3500, 3600]",
+                  "// Nếu TTL = -1: key không có expiry (BUG — setEx bị lỗi)",
+                  "// Nếu TTL = -2: key không tồn tại (cache không được ghi)",
+                  "// Nếu TTL ≈ 1800: TTL cũ (chưa deploy feature mới)",
+                  "// Nếu TTL ≈ 3600: PASS — feature CHCKNSPC-55 hoạt động đúng",
+                  "console.log('[TC-22] Sau khi test pass, chạy lệnh sau trong redis-cli:');",
+                  "const userId = pm.environment.get('user_id');",
+                  "console.log(`redis-cli TTL \"recommend:${userId}:sot-viemnhothao\"`);",
+                  "console.log('Kỳ vọng: TTL trong khoảng (3500, 3600] giây');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": [\"sot\", \"viemnhothao\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/symptoms/check",
+              "host": ["{{base_url}}"],
+              "path": ["symptoms", "check"]
+            },
+            "description": "TTL verification test cho feature CHCKNSPC-55.\nSau khi gọi API này, verify Redis TTL bằng tay:\n  redis-cli TTL \"recommend:<user_id>:sot-viemnhothao\"\nKết quả phải: (3500, 3600] — chứng minh TTL đã đổi từ 1800 → 3600.\nCách verify nhanh: redis-cli KEYS 'recommend:*' để tìm key, sau đó TTL <key>."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 // backend/src/services/RecommendationService.js
+const axios = require('axios')
+
 class RecommendationService {
   #patientHistoryRepo
   #allergyRepo
@@ -40,7 +42,7 @@ class RecommendationService {
       engineVersion:   aiResult.engineVersion,
     }
 
-    await this.#redis.setEx(cacheKey, 1800, JSON.stringify(result))
+    await this.#redis.setEx(cacheKey, 3600, JSON.stringify(result))
     return result
   }
 
@@ -55,10 +57,24 @@ class RecommendationService {
     )
   }
 
-  // TODO: swap body này khi AI service sẵn sàng
   // Contract: { symptoms: string[], history: string[], allergies: string[] }
   // per docs/api-contracts/be-ai-contract.md
+  // Dùng AI_SERVICE_URL khi service sẵn sàng — mock chỉ dùng khi không set env
   async #callAiService(symptoms, history, allergies) {
+    const aiUrl = process.env.AI_SERVICE_URL
+    if (aiUrl) {
+      const { data } = await axios.post(`${aiUrl}/ai/recommend`, {
+        symptoms,
+        history,
+        allergies,
+      })
+      return {
+        engineVersion:   data.engine_version,
+        recommendations: data.recommendations,
+      }
+    }
+
+    // Fallback mock — chỉ dùng khi AI_SERVICE_URL chưa được set (dev local)
     return {
       engineVersion: 'mock-v0',
       recommendations: [
