@@ -40,7 +40,7 @@ class RecommendationService {
       engineVersion:   aiResult.engineVersion,
     }
 
-    await this.#redis.setEx(cacheKey, 1800, JSON.stringify(result))
+    await this.#redis.setEx(cacheKey, 3600, JSON.stringify(result))
     return result
   }
 
