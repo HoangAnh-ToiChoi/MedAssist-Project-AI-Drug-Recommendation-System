@@ -54,8 +54,13 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
+    // Khong tu dong xử lý refresh/redirect cho các API auth (login, register, refresh)
+    const isAuthRoute = originalRequest.url?.includes('/auth/login') || 
+                        originalRequest.url?.includes('/auth/register') || 
+                        originalRequest.url?.includes('/auth/refresh')
+
     // Xu ly 401 Unauthorized: thu refresh token
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !isAuthRoute && !originalRequest._retry) {
       if (isRefreshing) {
         // Dang refresh token - xep request vao hang cho
         return new Promise((resolve, reject) => {
