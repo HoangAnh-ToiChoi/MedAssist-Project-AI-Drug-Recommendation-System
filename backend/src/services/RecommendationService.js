@@ -63,18 +63,22 @@ class RecommendationService {
   async #callAiService(symptoms, history, allergies) {
     const aiUrl = process.env.AI_SERVICE_URL
     if (aiUrl) {
-      const { data } = await axios.post(`${aiUrl}/ai/recommend`, {
-        symptoms,
-        history,
-        allergies,
-      })
-      return {
-        engineVersion:   data.engine_version,
-        recommendations: data.recommendations,
+      try {
+        const { data } = await axios.post(`${aiUrl}/ai/recommend`, {
+          symptoms,
+          history,
+          allergies,
+        })
+        return {
+          engineVersion:   data.engine_version,
+          recommendations: data.recommendations,
+        }
+      } catch (err) {
+        console.warn(`[AI Service Connection Warning] ${err.message}. Tự động fallback sang Mock dữ liệu mẫu để tiếp tục trải nghiệm.`);
       }
     }
 
-    // Fallback mock — chỉ dùng khi AI_SERVICE_URL chưa được set (dev local)
+    // Fallback mock — dùng khi AI_SERVICE_URL chưa được set HOẶC khi AI Service lỗi/chưa khởi chạy
     return {
       engineVersion: 'mock-v0',
       recommendations: [

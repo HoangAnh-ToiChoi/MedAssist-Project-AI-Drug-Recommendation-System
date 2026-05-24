@@ -20,7 +20,7 @@ class AuthService {
       throw new AppError('Email đã được sử dụng', 409, 'EMAIL_ALREADY_EXISTS')
     }
 
-    const passwordHash = await bcrypt.hash(password, 12)
+    const passwordHash = await bcrypt.hash(password, 10)
     const user = await this.#userRepo.createUser({ email, passwordHash, fullName })
 
     await this.#sendOtp(email, user.full_name)
@@ -130,7 +130,7 @@ class AuthService {
       throw new AppError('Link đặt lại mật khẩu không hợp lệ hoặc đã hết hạn', 400, 'TOKEN_EXPIRED_OR_INVALID')
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 12)
+    const passwordHash = await bcrypt.hash(newPassword, 10)
     await this.#userRepo.updatePassword(userId, passwordHash)
 
     // Invalidate reset token và refresh token cũ

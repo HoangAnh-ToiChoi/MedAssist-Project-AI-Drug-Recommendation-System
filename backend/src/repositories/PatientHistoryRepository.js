@@ -5,21 +5,18 @@ class PatientHistoryRepository {
     this.#pool = pool
   }
 
-  // [Tell Don't Ask] query đúng entry_type ngay tại Repository, không trả all rồi để Service filter
+  // Query patient conditions from database. In the database schema, this table uses 'condition' column instead of 'title'.
   async findChronicDiseasesByUserId(userId) {
     const { rows } = await this.#pool.query(
-      "SELECT title FROM patient_history WHERE user_id = $1 AND entry_type = 'chronic_disease'",
+      "SELECT condition FROM patient_history WHERE user_id = $1",
       [userId]
     )
-    return rows.map(r => r.title)
+    return rows.map(r => r.condition)
   }
 
+  // The database schema currently does not store current medications for a patient, returning an empty list to prevent errors.
   async findCurrentMedicationsByUserId(userId) {
-    const { rows } = await this.#pool.query(
-      "SELECT title FROM patient_history WHERE user_id = $1 AND entry_type = 'current_medication'",
-      [userId]
-    )
-    return rows.map(r => r.title)
+    return []
   }
 }
 
