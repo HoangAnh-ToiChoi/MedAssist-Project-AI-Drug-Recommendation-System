@@ -34,3 +34,6 @@ Thumbs.db
 
 # Git worktrees
 .worktrees/
+
+# Crawled CSV output (data có thể tái tạo, không commit)
+data/crawled/*.csv
