@@ -7,6 +7,7 @@ import SymptomInput from './pages/SymptomInput';
 import Dashboard from './pages/Dashboard';
 import DrugSuggestion from './pages/DrugSuggestion';
 import MedicalHistory from './pages/MedicalHistory';
+import Allergies from './pages/Allergies';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/suggestions" element={<DrugSuggestion />} />
         <Route path="/medical-history" element={<MedicalHistory />} />
+        <Route path="/allergies" element={<Allergies />} />
       </Routes>
     </BrowserRouter>
   );
