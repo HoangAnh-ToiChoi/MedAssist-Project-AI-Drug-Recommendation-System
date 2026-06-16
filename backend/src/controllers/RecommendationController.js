@@ -7,7 +7,7 @@ class RecommendationController {
     this.#recommendationService = recommendationService
   }
 
-  check = async (req, res, next) => {
+  async check(req, res, next) {
     try {
       const result = await this.#recommendationService.checkSymptoms(
         req.user.userId,

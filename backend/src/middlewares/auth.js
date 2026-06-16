@@ -11,7 +11,7 @@ const authenticate = (req, res, next) => {
   const token = header.split(' ')[1]
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET)
-    req.user = { userId: payload.userId, role: payload.role }
+    req.user = { id: payload.userId, userId: payload.userId, role: payload.role }
     next()
   } catch (err) {
     next(err)

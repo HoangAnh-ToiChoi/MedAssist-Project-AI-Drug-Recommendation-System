@@ -7,7 +7,7 @@ class AuthController {
     this.#authService = authService
   }
 
-  register = async (req, res, next) => {
+  async register(req, res, next) {
     try {
       const { email, password, fullName } = req.body
       const user = await this.#authService.register(email, password, fullName)
@@ -17,7 +17,7 @@ class AuthController {
     }
   }
 
-  login = async (req, res, next) => {
+  async login(req, res, next) {
     try {
       const { email, password } = req.body
       const result = await this.#authService.login(email, password)
@@ -27,7 +27,7 @@ class AuthController {
     }
   }
 
-  forgotPassword = async (req, res, next) => {
+  async forgotPassword(req, res, next) {
     try {
       await this.#authService.forgotPassword(req.body.email)
       res.json(ApiResponse.success(null, 'Nếu email tồn tại, bạn sẽ nhận được link đặt lại mật khẩu'))
@@ -36,7 +36,7 @@ class AuthController {
     }
   }
 
-  resetPassword = async (req, res, next) => {
+  async resetPassword(req, res, next) {
     try {
       const { token, newPassword } = req.body
       await this.#authService.resetPassword(token, newPassword)
@@ -46,7 +46,7 @@ class AuthController {
     }
   }
 
-  refresh = async (req, res, next) => {
+  async refresh(req, res, next) {
     try {
       const result = await this.#authService.refreshToken(req.body.refreshToken)
       res.json(ApiResponse.success(result, 'Làm mới token thành công'))
@@ -55,7 +55,7 @@ class AuthController {
     }
   }
 
-  verifyOtp = async (req, res, next) => {
+  async verifyOtp(req, res, next) {
     try {
       const { email, otp } = req.body
       const result = await this.#authService.verifyOtp(email, otp)
@@ -65,7 +65,7 @@ class AuthController {
     }
   }
 
-  resendOtp = async (req, res, next) => {
+  async resendOtp(req, res, next) {
     try {
       await this.#authService.resendOtp(req.body.email)
       res.json(ApiResponse.success(null, 'Đã gửi lại mã OTP'))
@@ -74,7 +74,7 @@ class AuthController {
     }
   }
 
-  logout = async (req, res, next) => {
+  async logout(req, res, next) {
     try {
       await this.#authService.logout(req.body.refreshToken)
       res.json(ApiResponse.success(null, 'Đăng xuất thành công'))

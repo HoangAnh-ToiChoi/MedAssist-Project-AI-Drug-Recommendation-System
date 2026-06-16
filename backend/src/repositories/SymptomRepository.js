@@ -1,3 +1,5 @@
+const Symptom = require('../entities/Symptom');
+
 class SymptomRepository {
   #pool
 
@@ -9,7 +11,7 @@ class SymptomRepository {
     const { rows } = await this.#pool.query(
       'SELECT id, code, name FROM symptoms ORDER BY name ASC'
     )
-    return rows
+    return rows.map(r => Symptom.fromRow(r));
   }
 }
 
