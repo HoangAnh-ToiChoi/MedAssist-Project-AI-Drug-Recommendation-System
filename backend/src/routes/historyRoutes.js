@@ -11,8 +11,10 @@ const pool = require('../config/db')
 
 const router = Router()
 
+const redisClient = require('../config/redis')
+
 const patientHistoryRepo = new PatientHistoryRepository(pool)
-const historyService = new HistoryService(patientHistoryRepo)
+const historyService = new HistoryService(patientHistoryRepo, redisClient)
 const historyController = new HistoryController(historyService)
 
 const idSchema = Joi.object({

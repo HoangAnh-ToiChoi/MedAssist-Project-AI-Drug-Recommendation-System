@@ -1,5 +1,3 @@
-const Allergy = require('../entities/Allergy');
-
 class AllergyRepository {
   #pool
 
@@ -9,13 +7,13 @@ class AllergyRepository {
 
   async findAllByUserId(userId) {
     const { rows } = await this.#pool.query(
-      `SELECT d.name, d.generic_name 
+      `SELECT d.name AS drug_name
        FROM allergies a
        JOIN drugs d ON a.drug_id = d.id
        WHERE a.user_id = $1`,
       [userId]
     )
-    return rows.map(r => Allergy.fromRow(r));
+    return rows.map((row) => row.drug_name)
   }
 }
 
