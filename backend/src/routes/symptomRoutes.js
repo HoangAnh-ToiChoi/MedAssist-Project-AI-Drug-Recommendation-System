@@ -45,7 +45,7 @@ const checkSchema = Joi.object({
 })
 
 // ── Routes ───────────────────────────────────────────────────────────────────
-router.get('/',      authenticate, symptomController.getAll)
-router.post('/check', authenticate, validate(checkSchema), recommendationController.check)
+router.get('/',      authenticate, symptomController.getAll.bind(symptomController))
+router.post('/check', authenticate, validate(checkSchema), recommendationController.check.bind(recommendationController))
 
 module.exports = router

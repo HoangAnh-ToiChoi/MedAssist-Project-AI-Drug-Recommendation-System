@@ -117,6 +117,7 @@ CREATE TABLE recommendations (
   input_symptoms JSONB     NOT NULL,
   output_drugs   JSONB     NOT NULL,
   ai_version     VARCHAR(20) DEFAULT 'rule-based-v1',
+  danger_alert   JSONB,
   created_at     TIMESTAMP DEFAULT NOW()
 );
 

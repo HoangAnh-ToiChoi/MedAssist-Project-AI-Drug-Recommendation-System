@@ -1,3 +1,5 @@
+const Allergy = require('../entities/Allergy');
+
 class AllergyRepository {
   #pool
 
@@ -13,13 +15,7 @@ class AllergyRepository {
        WHERE a.user_id = $1`,
       [userId]
     )
-    // Trả về cả tên biệt dược và tên hoạt chất để lọc dị ứng chính xác nhất
-    const names = new Set()
-    rows.forEach(r => {
-      if (r.name) names.add(r.name)
-      if (r.generic_name) names.add(r.generic_name)
-    })
-    return Array.from(names)
+    return rows.map(r => Allergy.fromRow(r));
   }
 }
 
