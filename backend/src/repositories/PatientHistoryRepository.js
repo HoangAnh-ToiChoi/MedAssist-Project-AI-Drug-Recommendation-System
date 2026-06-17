@@ -20,7 +20,9 @@ class PatientHistoryRepository {
   }
 
   async findCurrentMedicationsByUserId(userId) {
-    return []
+    throw new Error(
+      'findCurrentMedicationsByUserId is not implemented because the current schema does not store medication data.'
+    )
   }
 
   async findAllByUserId(userId) {

@@ -29,7 +29,8 @@ const errorHandler = (err, req, res, next) => {
   }
 
   // Unexpected error — không lộ chi tiết ra ngoài
-  console.error('Unexpected error:', err)
+  const logger = require('../utils/logger')
+  logger.error('Unexpected error:', err)
   return res.status(500).json(
     ApiResponse.error('Lỗi hệ thống, vui lòng thử lại sau', 'INTERNAL_ERROR')
   )

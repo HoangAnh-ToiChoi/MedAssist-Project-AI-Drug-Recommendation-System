@@ -1,7 +1,9 @@
 const { createClient } = require('redis')
+const logger = require('../utils/logger')
+const appConfig = require('./appConfig')
 
 const client = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379',
+  url: appConfig.redisUrl,
   socket: {
     // Thử lại tối đa 3 lần, sau đó dừng
     reconnectStrategy: (retries) => {
@@ -13,10 +15,20 @@ const client = createClient({
 
 let connected = false
 
-client.on('connect',    ()    => { connected = true;  console.log('Redis connected') })
-client.on('disconnect', ()    => { connected = false })
-client.on('error',      (err) => {
-  if (!connected) console.error('Redis unavailable:', err.message.split('\n')[0])
+client.on('connect', () => {
+  connected = true
+  logger.info('Redis connected successfully')
+})
+
+client.on('disconnect', () => {
+  connected = false
+  logger.info('Redis disconnected')
+})
+
+client.on('error', (err) => {
+  if (!connected) {
+    logger.error(`Redis unavailable: ${err.message.split('\n')[0]}`)
+  }
 })
 
 client.connect().catch(() => {})

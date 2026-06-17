@@ -2,20 +2,11 @@ const { Router } = require('express')
 const Joi = require('joi')
 const authenticate = require('../middlewares/auth')
 const validate = require('../middlewares/validate')
-
-const HistoryController = require('../controllers/HistoryController')
-const HistoryService = require('../services/HistoryService')
-const PatientHistoryRepository = require('../repositories/PatientHistoryRepository')
-
-const pool = require('../config/db')
+const container = require('../config/container')
 
 const router = Router()
 
-const redisClient = require('../config/redis')
-
-const patientHistoryRepo = new PatientHistoryRepository(pool)
-const historyService = new HistoryService(patientHistoryRepo, redisClient)
-const historyController = new HistoryController(historyService)
+const historyController = container.resolve('historyController')
 
 const idSchema = Joi.object({
   id: Joi.string().guid().required().messages({

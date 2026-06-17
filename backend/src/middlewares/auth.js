@@ -11,6 +11,9 @@ const authenticate = (req, res, next) => {
   const token = header.split(' ')[1]
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET)
+    if (payload.type && payload.type !== 'access') {
+      return next(new AppError('Unauthorized', 401, 'UNAUTHORIZED'))
+    }
     req.user = { id: payload.userId, userId: payload.userId, role: payload.role }
     next()
   } catch (err) {
