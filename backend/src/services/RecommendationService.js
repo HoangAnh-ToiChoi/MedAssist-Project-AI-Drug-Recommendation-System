@@ -1,9 +1,13 @@
 const axios = require('axios')
 const Recommendation = require('../entities/Recommendation')
+const AppError = require('../utils/AppError')
+const {
+  DANGER_SYMPTOM_MESSAGES,
+  MAX_RECOMMENDATIONS,
+} = require('../config/recommendationRules')
 
 const RECOMMENDATION_CACHE_TTL_SECONDS = 3600
 const AI_SERVICE_TIMEOUT_MS = 1500
-const MAX_RECOMMENDATIONS = 5
 
 class RecommendationService {
   #patientHistoryRepo
@@ -14,14 +18,15 @@ class RecommendationService {
   constructor(patientHistoryRepo, allergyRepository, recommendationRepo, redis) {
     this.#patientHistoryRepo = patientHistoryRepo
     this.#allergyRepository = allergyRepository
-    this.allergyRepository = allergyRepository
     this.#recommendationRepo = recommendationRepo
     this.#redis = redis
   }
 
   async checkSymptoms(userId, symptoms) {
     const resolvedSymptoms = await this.#recommendationRepo.resolveSymptomCodes(symptoms)
-    const normalizedSymptoms = this.#normalizeSymptoms(resolvedSymptoms.length > 0 ? resolvedSymptoms : symptoms)
+    const normalizedSymptoms = this.#normalizeSymptoms(
+      resolvedSymptoms.length > 0 ? resolvedSymptoms : symptoms
+    )
 
     const cacheKey = this.#buildCacheKey(userId, normalizedSymptoms)
     const cached = await this.#readCache(cacheKey)
@@ -29,7 +34,7 @@ class RecommendationService {
 
     const [historyEntities, allergies] = await Promise.all([
       this.#patientHistoryRepo.findChronicDiseasesByUserId(userId),
-      this.allergyRepository.findAllByUserId(userId),
+      this.#allergyRepository.findAllByUserId(userId),
     ])
 
     const history = historyEntities
@@ -38,77 +43,9 @@ class RecommendationService {
 
     const aiResult = await this.#callAiService(normalizedSymptoms, history, allergies)
 
-    // Apply defense-in-depth filter: remove drug recommendations if drug name matches user's allergies
-    if (aiResult.recommendations && Array.isArray(aiResult.recommendations)) {
-      aiResult.recommendations = aiResult.recommendations.filter((drug) => {
-        const drugNames = [drug.name, drug.drug_name, drug.generic_name]
-          .map((name) => String(name || '').trim().toLowerCase())
-          .filter(Boolean)
-
-        const normalizedAllergies = allergies
-          .map((allergy) => {
-            if (typeof allergy === 'string') {
-              return allergy.trim().toLowerCase()
-            }
-            return String(allergy.name || allergy.drug_name || allergy.genericName || allergy.generic_name || '').trim().toLowerCase()
-          })
-          .filter(Boolean)
-
-        return !drugNames.some((drugName) =>
-          normalizedAllergies.some((allergy) =>
-            drugName === allergy || drugName.includes(allergy) || allergy.includes(drugName)
-          )
-        )
-      })
-    }
-
-    // Apply medical history contraindications filter: remove drug recommendations if user's history condition matches drug's contraindications
-    if (history && history.length > 0 && aiResult.recommendations && Array.isArray(aiResult.recommendations)) {
-      const cleanString = (str) =>
-        String(str || '')
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .toLowerCase()
-          .trim()
-
-      aiResult.recommendations = aiResult.recommendations.filter((drug) => {
-        const normContra = cleanString(drug.contraindications)
-        if (!normContra) return true
-
-        const isContraindicated = history.some((condition) => {
-          const normCond = cleanString(condition)
-          if (!normCond) return false
-
-          // 1. Substring match
-          if (normContra.includes(normCond) || normCond.includes(normContra)) {
-            return true
-          }
-
-          // 2. Dynamic word overlap match (excluding common helper words)
-          const ignoreWords = ['khong', 'dung', 'uong', 'kem', 'hoac', 'tren', 'duoi', 'nhe', 'nhat', 'mang', 'tinh']
-          const condWords = normCond.split(/\s+/)
-            .filter((word) => !ignoreWords.includes(word))
-            .filter((word) => word.length >= 4 || ['gan', 'than', 'tim', 'hen', 'say', 'mat', 'ngu', 'sot'].includes(word))
-
-          const hasOverlap = condWords.some((word) => normContra.includes(word))
-          if (hasOverlap) {
-            return true
-          }
-
-          // 3. Fallback for compound organ keywords (e.g. da day)
-          const keywords = ['da day']
-          for (const kw of keywords) {
-            if (normCond.includes(kw) && normContra.includes(kw)) {
-              return true
-            }
-          }
-
-          return false
-        })
-
-        return !isContraindicated
-      })
-    }
+    aiResult.recommendations = this.#normalizeRecommendations(aiResult.recommendations)
+      .filter((drug) => !this.#isDrugBlockedByAllergies(drug, allergies))
+      .filter((drug) => !this.#isDrugContraindicatedForHistory(drug, history))
 
     aiResult.recommendations = this.#selectTopSafeRecommendations(aiResult.recommendations)
 
@@ -139,7 +76,7 @@ class RecommendationService {
   #normalizeSymptoms(symptoms) {
     return [...new Set(
       symptoms
-        .map((item) => item.trim())
+        .map((item) => String(item || '').trim().toLowerCase())
         .filter(Boolean)
     )].sort()
   }
@@ -172,36 +109,102 @@ class RecommendationService {
   }
 
   #selectTopSafeRecommendations(recommendations) {
-    return recommendations
+    return this.#normalizeRecommendations(recommendations)
       .filter((drug) => Number(drug.confidence || 0) > 0)
       .sort((first, second) => Number(second.confidence || 0) - Number(first.confidence || 0))
       .slice(0, MAX_RECOMMENDATIONS)
   }
 
+  #isDrugBlockedByAllergies(drug, allergies) {
+    return allergies.some((allergy) => {
+      if (allergy && typeof allergy.isAllergicTo === 'function') {
+        return allergy.isAllergicTo(drug)
+      }
+
+      const normalizedAllergy = this.#normalizeDrugName(
+        allergy?.name || allergy?.drug_name || allergy?.genericName || allergy?.generic_name || allergy
+      )
+
+      if (!normalizedAllergy) return false
+
+      return [drug.name, drug.drug_name, drug.generic_name]
+        .map((name) => this.#normalizeDrugName(name))
+        .filter(Boolean)
+        .some((drugName) =>
+          drugName === normalizedAllergy ||
+          drugName.includes(normalizedAllergy) ||
+          normalizedAllergy.includes(drugName)
+        )
+    })
+  }
+
+  #isDrugContraindicatedForHistory(drug, history) {
+    if (!history || history.length === 0) return false
+
+    const normalizedContraindications = this.#cleanString(drug.contraindications)
+    if (!normalizedContraindications) return false
+
+    return history.some((condition) => {
+      const normalizedCondition = this.#cleanString(condition)
+      if (!normalizedCondition) return false
+
+      if (
+        normalizedContraindications.includes(normalizedCondition) ||
+        normalizedCondition.includes(normalizedContraindications)
+      ) {
+        return true
+      }
+
+      const ignoreWords = ['khong', 'dung', 'uong', 'kem', 'hoac', 'tren', 'duoi', 'nhe', 'nhat', 'mang', 'tinh']
+      const conditionWords = normalizedCondition
+        .split(/\s+/)
+        .filter((word) => !ignoreWords.includes(word))
+        .filter((word) => word.length >= 4 || ['gan', 'than', 'tim', 'hen', 'say', 'mat', 'ngu', 'sot'].includes(word))
+
+      if (conditionWords.some((word) => normalizedContraindications.includes(word))) {
+        return true
+      }
+
+      return ['da day'].some((keyword) =>
+        normalizedCondition.includes(keyword) && normalizedContraindications.includes(keyword)
+      )
+    })
+  }
+
+  #cleanString(str) {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+  }
+
   #detectDanger(symptomCodes) {
-    const dangerMessages = {
-      'kho_tho': 'Khó thở có thể là dấu hiệu bệnh phổi hoặc tim mạch. Đến cơ sở y tế ngay.',
-      'dau_nguc': 'Đau ngực có thể là triệu chứng nhồi máu cơ tim. Gọi 115 ngay!',
-    }
     for (const code of symptomCodes) {
-      if (dangerMessages[code]) {
-        return `⚠️ Cảnh báo y tế: ${dangerMessages[code]} Thông tin gợi ý dưới đây chỉ mang tính tham khảo.`
+      if (DANGER_SYMPTOM_MESSAGES[code]) {
+        return `Cảnh báo y tế: ${DANGER_SYMPTOM_MESSAGES[code]} Thông tin gợi ý dưới đây chỉ mang tính tham khảo.`
       }
     }
+
     return null
   }
 
   async #callAiService(symptoms, history, allergies) {
     const aiUrl = process.env.AI_SERVICE_URL
+
     if (aiUrl) {
       try {
-        const { data } = await axios.post(`${aiUrl}/ai/recommend`, {
-          symptoms,
-          history,
-          allergies,
-        }, {
-          timeout: Number(process.env.AI_SERVICE_TIMEOUT_MS) || AI_SERVICE_TIMEOUT_MS,
-        })
+        const { data } = await axios.post(
+          `${aiUrl}/ai/recommend`,
+          {
+            symptoms,
+            history,
+            allergies,
+          },
+          {
+            timeout: Number(process.env.AI_SERVICE_TIMEOUT_MS) || AI_SERVICE_TIMEOUT_MS,
+          }
+        )
 
         return {
           engineVersion: data.engine_version,
@@ -209,7 +212,9 @@ class RecommendationService {
           dangerAlert: data.danger_alert || null,
         }
       } catch (err) {
-        console.warn(`[AI Service Connection Warning] ${err.message}. Tự động fallback sang Mock dữ liệu mẫu để tiếp tục trải nghiệm.`)
+        console.warn(
+          `[AI Service Warning] ${err.message}. Chuyển sang nguồn gợi ý thuốc từ cơ sở dữ liệu.`,
+        )
       }
     }
 
@@ -222,11 +227,11 @@ class RecommendationService {
       }
     } catch (dbErr) {
       console.error('Failed to fetch recommendations from DB:', dbErr)
-      return {
-        engineVersion: 'empty-v1',
-        dangerAlert: null,
-        recommendations: [],
-      }
+      throw new AppError(
+        'Không thể tạo gợi ý thuốc vào lúc này. Vui lòng thử lại sau.',
+        503,
+        'RECOMMENDATION_UNAVAILABLE',
+      )
     }
   }
 }
