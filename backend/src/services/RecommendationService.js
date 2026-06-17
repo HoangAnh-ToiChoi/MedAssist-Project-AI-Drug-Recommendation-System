@@ -1,25 +1,41 @@
-const axios = require('axios')
 const Recommendation = require('../entities/Recommendation')
 const AppError = require('../utils/AppError')
+const appConfig = require('../config/appConfig')
+const logger = require('../utils/logger')
 const {
   DANGER_SYMPTOM_MESSAGES,
   MAX_RECOMMENDATIONS,
 } = require('../config/recommendationRules')
 
-const RECOMMENDATION_CACHE_TTL_SECONDS = 3600
-const AI_SERVICE_TIMEOUT_MS = 1500
+const RECOMMENDATION_CACHE_TTL_SECONDS = appConfig.cache.recommendationTtlSeconds
 
 class RecommendationService {
   #patientHistoryRepo
   #allergyRepository
   #recommendationRepo
   #redis
+  #aiEngines
 
-  constructor(patientHistoryRepo, allergyRepository, recommendationRepo, redis) {
-    this.#patientHistoryRepo = patientHistoryRepo
-    this.#allergyRepository = allergyRepository
-    this.#recommendationRepo = recommendationRepo
-    this.#redis = redis
+  constructor(patientHistoryRepo, allergyRepository, recommendationRepo, redis, aiEngines) {
+    if (arguments.length === 1 && typeof arguments[0] === 'object' && arguments[0] !== null) {
+      const deps = arguments[0]
+      this.#patientHistoryRepo = deps.patientHistoryRepo
+      this.#allergyRepository = deps.allergyRepository || deps.allergyRepo
+      this.#recommendationRepo = deps.recommendationRepo
+      this.#redis = deps.redis || deps.redisClient
+      this.#aiEngines = deps.aiEngines
+    } else {
+      this.#patientHistoryRepo = patientHistoryRepo
+      this.#allergyRepository = allergyRepository
+      this.#recommendationRepo = recommendationRepo
+      this.#redis = redis
+      this.#aiEngines = aiEngines
+    }
+
+    if (!this.#aiEngines) {
+      const DatabaseFallbackEngine = require('./ai/DatabaseFallbackEngine')
+      this.#aiEngines = [new DatabaseFallbackEngine(this.#recommendationRepo)]
+    }
   }
 
   async checkSymptoms(userId, symptoms) {
@@ -190,49 +206,35 @@ class RecommendationService {
   }
 
   async #callAiService(symptoms, history, allergies) {
-    const aiUrl = process.env.AI_SERVICE_URL
-
-    if (aiUrl) {
-      try {
-        const { data } = await axios.post(
-          `${aiUrl}/ai/recommend`,
-          {
-            symptoms,
-            history,
-            allergies,
-          },
-          {
-            timeout: Number(process.env.AI_SERVICE_TIMEOUT_MS) || AI_SERVICE_TIMEOUT_MS,
-          }
-        )
-
-        return {
-          engineVersion: data.engine_version,
-          recommendations: data.recommendations,
-          dangerAlert: data.danger_alert || null,
-        }
-      } catch (err) {
-        console.warn(
-          `[AI Service Warning] ${err.message}. Chuyển sang nguồn gợi ý thuốc từ cơ sở dữ liệu.`,
-        )
-      }
-    }
-
-    try {
-      const recommendations = await this.#recommendationRepo.findRecommendedDrugsBySymptomCodes(symptoms)
-      return {
-        engineVersion: 'db-fallback-v1',
-        dangerAlert: this.#detectDanger(symptoms),
-        recommendations,
-      }
-    } catch (dbErr) {
-      console.error('Failed to fetch recommendations from DB:', dbErr)
+    if (!this.#aiEngines || this.#aiEngines.length === 0) {
       throw new AppError(
         'Không thể tạo gợi ý thuốc vào lúc này. Vui lòng thử lại sau.',
         503,
         'RECOMMENDATION_UNAVAILABLE',
       )
     }
+
+    const errors = []
+    for (const engine of this.#aiEngines) {
+      try {
+        const result = await engine.getRecommendations(symptoms, history, allergies)
+        if (result) {
+          return result
+        }
+      } catch (err) {
+        errors.push(err.message)
+        logger.warn(
+          `[AI Engine Warning] Engine ${engine.constructor.name} failed: ${err.message}. Trying next engine...`
+        )
+      }
+    }
+
+    logger.error('All recommendation engines failed:', { errors })
+    throw new AppError(
+      'Không thể tạo gợi ý thuốc vào lúc này. Vui lòng thử lại sau.',
+      503,
+      'RECOMMENDATION_UNAVAILABLE',
+    )
   }
 }
 

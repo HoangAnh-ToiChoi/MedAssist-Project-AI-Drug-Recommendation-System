@@ -2,12 +2,7 @@ const { Router } = require('express')
 const Joi = require('joi')
 const rateLimit = require('express-rate-limit')
 const validate = require('../middlewares/validate')
-const AuthController = require('../controllers/authController')
-const AuthService = require('../services/authService')
-const UserRepository = require('../repositories/userRepository')
-const pool = require('../config/db')
-const redisClient = require('../config/redis')
-const emailTransporter = require('../config/email')
+const container = require('../config/container')
 
 const router = Router()
 
@@ -91,9 +86,7 @@ const resendOtpSchema = Joi.object({
   }),
 })
 
-const userRepo = new UserRepository(pool)
-const authService = new AuthService(userRepo, redisClient, emailTransporter)
-const authController = new AuthController(authService)
+const authController = container.resolve('authController')
 
 router.post('/register', authLimiter, validate(registerSchema), authController.register.bind(authController))
 router.post('/verify-otp', authLimiter, validate(verifyOtpSchema), authController.verifyOtp.bind(authController))
