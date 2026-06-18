@@ -16,7 +16,6 @@ const MedicalHistory = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  // Lấy danh sách bệnh từ API
   const fetchHistory = async () => {
     try {
       const res = await api.get('/history');
@@ -33,32 +32,28 @@ const MedicalHistory = () => {
     fetchHistory();
   }, []);
 
-  // Mở modal thêm mới
   const handleAdd = () => {
     setEditingId(null);
     setFormData({ diseaseName: '', year: '', note: '' });
     setModalOpen(true);
   };
 
-  // Mở modal sửa
   const handleEdit = (item) => {
     setEditingId(item.id);
     setFormData({ diseaseName: item.diseaseName, year: item.year, note: item.note || '' });
     setModalOpen(true);
   };
 
-  // Xóa bệnh
   const handleDelete = async (id) => {
     if (!confirm('Bạn có chắc muốn xóa bệnh nền này?')) return;
     try {
       await api.delete(`/history/${id}`);
-      fetchHistory(); // reload danh sách
+      fetchHistory();
     } catch (err) {
       alert('Xóa thất bại');
     }
   };
 
-  // Lưu (thêm hoặc sửa)
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.diseaseName.trim()) {
@@ -73,7 +68,7 @@ const MedicalHistory = () => {
         await api.post('/history', formData);
       }
       setModalOpen(false);
-      fetchHistory(); // reload danh sách
+      fetchHistory();
     } catch (err) {
       alert('Lưu thất bại');
     } finally {
@@ -83,12 +78,11 @@ const MedicalHistory = () => {
 
   return (
     <div className="relative min-h-screen bg-[#0B0B0C] text-gray-100 font-sans overflow-hidden">
-      {/* Background glowing orbs (giống các trang khác) */}
       <div className="bg-glow-orb w-[400px] h-[400px] bg-[#00F0FF]/10 top-[20%] left-[-10%]"></div>
       <div className="bg-glow-orb w-[500px] h-[500px] bg-[#8A2BE2]/10 bottom-[-10%] right-[-10%]"></div>
-      
+
       <Navbar />
-      
+
       <div className="relative z-10 container mx-auto px-6 py-10 max-w-6xl">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-extrabold">📋 Tiền Sử Bệnh</h1>
@@ -124,12 +118,30 @@ const MedicalHistory = () => {
         )}
       </div>
 
-      {/* Modal thêm/sửa */}
+      {/* Modal thêm/sửa - đã sửa giao diện input */}
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? 'Sửa bệnh' : 'Thêm bệnh nền'}>
         <form onSubmit={handleSubmit}>
-          <Input label="Tên bệnh" value={formData.diseaseName} onChange={(e) => setFormData({ ...formData, diseaseName: e.target.value })} required />
-          <Input label="Năm chẩn đoán" type="number" value={formData.year} onChange={(e) => setFormData({ ...formData, year: e.target.value })} required />
-          <Input label="Ghi chú (thuốc đang dùng...)" value={formData.note} onChange={(e) => setFormData({ ...formData, note: e.target.value })} />
+          <Input
+            label="Tên bệnh"
+            value={formData.diseaseName}
+            onChange={(e) => setFormData({ ...formData, diseaseName: e.target.value })}
+            required
+            className="bg-white text-black placeholder-gray-400"
+          />
+          <Input
+            label="Năm chẩn đoán"
+            type="number"
+            value={formData.year}
+            onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+            required
+            className="bg-white text-black placeholder-gray-400"
+          />
+          <Input
+            label="Ghi chú (thuốc đang dùng...)"
+            value={formData.note}
+            onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+            className="bg-white text-black placeholder-gray-400"
+          />
           <div className="flex justify-end gap-3 mt-4">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Hủy</Button>
             <Button type="submit" loading={submitting}>Lưu</Button>

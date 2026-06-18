@@ -80,8 +80,9 @@ const Dashboard = () => {
             </Link>
 
             {/* Card 2: Medical History */}
-            <div 
-              className="group glass-card p-6 rounded-2xl border-white/5 hover:border-[#8A2BE2]/30 transition-all duration-300 relative overflow-hidden cursor-pointer hover:-translate-y-1"
+            <Link 
+              to="/medical-history"
+              className="group glass-card p-6 rounded-2xl border-white/5 hover:border-[#8A2BE2]/30 transition-all duration-300 relative overflow-hidden hover:-translate-y-1"
             >
               <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-gradient-to-br from-[#8A2BE2]/10 to-transparent rounded-full blur-xl group-hover:scale-150 transition-transform"></div>
               <div className="w-10 h-10 rounded-xl bg-[#8A2BE2]/10 border border-[#8A2BE2]/20 flex items-center justify-center text-xl mb-6 shadow-[0_0_10px_rgba(138,43,226,0.1)] group-hover:scale-105 transition-transform">
@@ -94,11 +95,12 @@ const Dashboard = () => {
               <span className="text-xs font-semibold text-[#8A2BE2] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                 Quản lý tiền sử &rarr;
               </span>
-            </div>
+            </Link>
 
             {/* Card 3: Allergies */}
-            <div 
-              className="group glass-card p-6 rounded-2xl border-white/5 hover:border-[#FF007F]/30 transition-all duration-300 relative overflow-hidden cursor-pointer hover:-translate-y-1"
+            <Link 
+              to="/allergies"
+              className="group glass-card p-6 rounded-2xl border-white/5 hover:border-[#FF007F]/30 transition-all duration-300 relative overflow-hidden hover:-translate-y-1"
             >
               <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-gradient-to-br from-[#FF007F]/10 to-transparent rounded-full blur-xl group-hover:scale-150 transition-transform"></div>
               <div className="w-10 h-10 rounded-xl bg-[#FF007F]/10 border border-[#FF007F]/20 flex items-center justify-center text-xl mb-6 shadow-[0_0_10px_rgba(255,0,127,0.1)] group-hover:scale-105 transition-transform">
@@ -111,7 +113,7 @@ const Dashboard = () => {
               <span className="text-xs font-semibold text-[#FF007F] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                 Cấu hình dị ứng &rarr;
               </span>
-            </div>
+            </Link>
 
           </div>
         </div>
