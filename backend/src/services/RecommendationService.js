@@ -1,109 +1,240 @@
-// backend/src/services/RecommendationService.js
-const axios = require('axios')
+const Recommendation = require('../entities/Recommendation')
+const AppError = require('../utils/AppError')
+const appConfig = require('../config/appConfig')
+const logger = require('../utils/logger')
+const {
+  DANGER_SYMPTOM_MESSAGES,
+  MAX_RECOMMENDATIONS,
+} = require('../config/recommendationRules')
+
+const RECOMMENDATION_CACHE_TTL_SECONDS = appConfig.cache.recommendationTtlSeconds
 
 class RecommendationService {
   #patientHistoryRepo
-  #allergyRepo
+  #allergyRepository
   #recommendationRepo
   #redis
+  #aiEngines
 
-  constructor(patientHistoryRepo, allergyRepo, recommendationRepo, redis) {
-    this.#patientHistoryRepo = patientHistoryRepo
-    this.#allergyRepo        = allergyRepo
-    this.#recommendationRepo = recommendationRepo
-    this.#redis              = redis
+  constructor(patientHistoryRepo, allergyRepository, recommendationRepo, redis, aiEngines) {
+    if (arguments.length === 1 && typeof arguments[0] === 'object' && arguments[0] !== null) {
+      const deps = arguments[0]
+      this.#patientHistoryRepo = deps.patientHistoryRepo
+      this.#allergyRepository = deps.allergyRepository || deps.allergyRepo
+      this.#recommendationRepo = deps.recommendationRepo
+      this.#redis = deps.redis || deps.redisClient
+      this.#aiEngines = deps.aiEngines
+    } else {
+      this.#patientHistoryRepo = patientHistoryRepo
+      this.#allergyRepository = allergyRepository
+      this.#recommendationRepo = recommendationRepo
+      this.#redis = redis
+      this.#aiEngines = aiEngines
+    }
+
+    if (!this.#aiEngines) {
+      const DatabaseFallbackEngine = require('./ai/DatabaseFallbackEngine')
+      this.#aiEngines = [new DatabaseFallbackEngine(this.#recommendationRepo)]
+    }
   }
 
   async checkSymptoms(userId, symptoms) {
-    const cacheKey = `recommend:${userId}:${[...symptoms].sort().join('-')}`
-    const cached = await this.#redis.get(cacheKey)
-    if (cached) return JSON.parse(cached)
+    const resolvedSymptoms = await this.#recommendationRepo.resolveSymptomCodes(symptoms)
+    const normalizedSymptoms = this.#normalizeSymptoms(
+      resolvedSymptoms.length > 0 ? resolvedSymptoms : symptoms
+    )
 
-    // [Tell Don't Ask] gọi đúng method có intent rõ ràng — không nhận raw rows rồi tự filter
-    const [history, allergies] = await Promise.all([
+    const cacheKey = this.#buildCacheKey(userId, normalizedSymptoms)
+    const cached = await this.#readCache(cacheKey)
+    if (cached) return cached
+
+    const [historyEntities, allergies] = await Promise.all([
       this.#patientHistoryRepo.findChronicDiseasesByUserId(userId),
-      this.#allergyRepo.findAllByUserId(userId),
+      this.#allergyRepository.findAllByUserId(userId),
     ])
 
-    const aiResult = await this.#callAiService(symptoms, history, allergies)
-    const filtered = this.#filterAllergies(aiResult.recommendations, allergies)
+    const history = historyEntities
+      .map((item) => item.getCondition())
+      .filter(Boolean)
 
-    const saved = await this.#recommendationRepo.create({
+    const aiResult = await this.#callAiService(normalizedSymptoms, history, allergies)
+
+    aiResult.recommendations = this.#normalizeRecommendations(aiResult.recommendations)
+      .filter((drug) => !this.#isDrugBlockedByAllergies(drug, allergies))
+      .filter((drug) => !this.#isDrugContraindicatedForHistory(drug, history))
+
+    aiResult.recommendations = this.#selectTopSafeRecommendations(aiResult.recommendations)
+
+    const recommendation = new Recommendation({
       userId,
-      inputSymptoms: { symptoms, history, allergies },
-      outputDrugs:   filtered,
-      dangerAlert:   null,
-      engineVersion: aiResult.engineVersion,
+      inputSymptoms: {
+        symptoms: normalizedSymptoms,
+        history,
+        allergies,
+      },
+      outputDrugs: aiResult.recommendations,
+      dangerAlert: aiResult.dangerAlert || null,
+      aiVersion: aiResult.engineVersion,
     })
 
+    const saved = await this.#recommendationRepo.save(recommendation)
     const result = {
-      id:              saved.id,
-      recommendations: filtered,
-      engineVersion:   aiResult.engineVersion,
+      id: saved.id,
+      recommendations: aiResult.recommendations,
+      engineVersion: aiResult.engineVersion,
+      dangerAlert: aiResult.dangerAlert || null,
     }
 
-    await this.#redis.setEx(cacheKey, 3600, JSON.stringify(result))
+    await this.#writeCache(cacheKey, result)
     return result
   }
 
-  #filterAllergies(recommendations, allergies) {
-    if (!allergies.length) return recommendations
-    const lowerAllergies = allergies.map(a => a.toLowerCase())
-    return recommendations.filter(drug =>
-      !lowerAllergies.some(a =>
-        drug.name.toLowerCase().includes(a) ||
-        drug.generic_name.toLowerCase().includes(a)
-      )
-    )
+  #normalizeSymptoms(symptoms) {
+    return [...new Set(
+      symptoms
+        .map((item) => String(item || '').trim().toLowerCase())
+        .filter(Boolean)
+    )].sort()
   }
 
-  // Contract: { symptoms: string[], history: string[], allergies: string[] }
-  // per docs/api-contracts/be-ai-contract.md
-  // Dùng AI_SERVICE_URL khi service sẵn sàng — mock chỉ dùng khi không set env
-  async #callAiService(symptoms, history, allergies) {
-    const aiUrl = process.env.AI_SERVICE_URL
-    if (aiUrl) {
-      try {
-        const { data } = await axios.post(`${aiUrl}/ai/recommend`, {
-          symptoms,
-          history,
-          allergies,
-        })
-        return {
-          engineVersion:   data.engine_version,
-          recommendations: data.recommendations,
-        }
-      } catch (err) {
-        console.warn(`[AI Service Connection Warning] ${err.message}. Tự động fallback sang Mock dữ liệu mẫu để tiếp tục trải nghiệm.`);
+  #buildCacheKey(userId, symptoms) {
+    return `recommend:${userId}:${symptoms.join('-')}`
+  }
+
+  async #readCache(cacheKey) {
+    try {
+      const cached = await this.#redis.get(cacheKey)
+      return cached ? JSON.parse(cached) : null
+    } catch {
+      return null
+    }
+  }
+
+  async #writeCache(cacheKey, value) {
+    try {
+      await this.#redis.setEx(cacheKey, RECOMMENDATION_CACHE_TTL_SECONDS, JSON.stringify(value))
+    } catch {}
+  }
+
+  #normalizeRecommendations(recommendations) {
+    return Array.isArray(recommendations) ? recommendations : []
+  }
+
+  #normalizeDrugName(drugName) {
+    return String(drugName || '').trim().toLowerCase()
+  }
+
+  #selectTopSafeRecommendations(recommendations) {
+    return this.#normalizeRecommendations(recommendations)
+      .filter((drug) => Number(drug.confidence || 0) > 0)
+      .sort((first, second) => Number(second.confidence || 0) - Number(first.confidence || 0))
+      .slice(0, MAX_RECOMMENDATIONS)
+  }
+
+  #isDrugBlockedByAllergies(drug, allergies) {
+    return allergies.some((allergy) => {
+      if (allergy && typeof allergy.isAllergicTo === 'function') {
+        return allergy.isAllergicTo(drug)
+      }
+
+      const normalizedAllergy = this.#normalizeDrugName(
+        allergy?.name || allergy?.drug_name || allergy?.genericName || allergy?.generic_name || allergy
+      )
+
+      if (!normalizedAllergy) return false
+
+      return [drug.name, drug.drug_name, drug.generic_name]
+        .map((name) => this.#normalizeDrugName(name))
+        .filter(Boolean)
+        .some((drugName) =>
+          drugName === normalizedAllergy ||
+          drugName.includes(normalizedAllergy) ||
+          normalizedAllergy.includes(drugName)
+        )
+    })
+  }
+
+  #isDrugContraindicatedForHistory(drug, history) {
+    if (!history || history.length === 0) return false
+
+    const normalizedContraindications = this.#cleanString(drug.contraindications)
+    if (!normalizedContraindications) return false
+
+    return history.some((condition) => {
+      const normalizedCondition = this.#cleanString(condition)
+      if (!normalizedCondition) return false
+
+      if (
+        normalizedContraindications.includes(normalizedCondition) ||
+        normalizedCondition.includes(normalizedContraindications)
+      ) {
+        return true
+      }
+
+      const ignoreWords = ['khong', 'dung', 'uong', 'kem', 'hoac', 'tren', 'duoi', 'nhe', 'nhat', 'mang', 'tinh']
+      const conditionWords = normalizedCondition
+        .split(/\s+/)
+        .filter((word) => !ignoreWords.includes(word))
+        .filter((word) => word.length >= 4 || ['gan', 'than', 'tim', 'hen', 'say', 'mat', 'ngu', 'sot'].includes(word))
+
+      if (conditionWords.some((word) => normalizedContraindications.includes(word))) {
+        return true
+      }
+
+      return ['da day'].some((keyword) =>
+        normalizedCondition.includes(keyword) && normalizedContraindications.includes(keyword)
+      )
+    })
+  }
+
+  #cleanString(str) {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+  }
+
+  #detectDanger(symptomCodes) {
+    for (const code of symptomCodes) {
+      if (DANGER_SYMPTOM_MESSAGES[code]) {
+        return `Cảnh báo y tế: ${DANGER_SYMPTOM_MESSAGES[code]} Thông tin gợi ý dưới đây chỉ mang tính tham khảo.`
       }
     }
 
-    // Fallback mock — dùng khi AI_SERVICE_URL chưa được set HOẶC khi AI Service lỗi/chưa khởi chạy
-    return {
-      engineVersion: 'mock-v0',
-      recommendations: [
-        {
-          name:              'Paracetamol 500mg',
-          generic_name:      'Paracetamol',
-          confidence:        0.90,
-          category:          'Giảm đau - Hạ sốt',
-          reason:            'Phù hợp với triệu chứng sốt và đau đầu. Không có tương tác với thuốc đang dùng.',
-          description:       'Thuốc giảm đau hạ sốt thông thường, an toàn cho hầu hết người dùng.',
-          dosage:            '500mg - 1g mỗi 4-6 giờ, tối đa 4g/ngày',
-          contraindications: 'Suy gan nặng, dị ứng Paracetamol',
-        },
-        {
-          name:              'Ibuprofen 400mg',
-          generic_name:      'Ibuprofen',
-          confidence:        0.72,
-          category:          'NSAIDs - Kháng viêm',
-          reason:            'Có tác dụng hạ sốt và giảm đau đầu hiệu quả.',
-          description:       'Thuốc kháng viêm không steroid, hạ sốt và giảm đau.',
-          dosage:            '400mg mỗi 6-8 giờ sau ăn',
-          contraindications: 'Loét dạ dày, suy thận nặng',
-        },
-      ],
+    return null
+  }
+
+  async #callAiService(symptoms, history, allergies) {
+    if (!this.#aiEngines || this.#aiEngines.length === 0) {
+      throw new AppError(
+        'Không thể tạo gợi ý thuốc vào lúc này. Vui lòng thử lại sau.',
+        503,
+        'RECOMMENDATION_UNAVAILABLE',
+      )
     }
+
+    const errors = []
+    for (const engine of this.#aiEngines) {
+      try {
+        const result = await engine.getRecommendations(symptoms, history, allergies)
+        if (result) {
+          return result
+        }
+      } catch (err) {
+        errors.push(err.message)
+        logger.warn(
+          `[AI Engine Warning] Engine ${engine.constructor.name} failed: ${err.message}. Trying next engine...`
+        )
+      }
+    }
+
+    logger.error('All recommendation engines failed:', { errors })
+    throw new AppError(
+      'Không thể tạo gợi ý thuốc vào lúc này. Vui lòng thử lại sau.',
+      503,
+      'RECOMMENDATION_UNAVAILABLE',
+    )
   }
 }
 

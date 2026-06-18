@@ -7,10 +7,10 @@ class RecommendationController {
     this.#recommendationService = recommendationService
   }
 
-  check = async (req, res, next) => {
+  async check(req, res, next) {
     try {
       const result = await this.#recommendationService.checkSymptoms(
-        req.user.userId,
+        req.user.id,
         req.body.symptoms,
       )
       res.json(ApiResponse.success(result, 'Gợi ý thuốc thành công'))

@@ -16,6 +16,19 @@ const MedicalHistory = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  const toFormData = (item) => ({
+    diseaseName: item.condition || '',
+    year: item.diagnosedAt ? new Date(item.diagnosedAt).getFullYear().toString() : '',
+    note: item.notes || '',
+  });
+
+  const toApiPayload = () => ({
+    condition: formData.diseaseName.trim(),
+    status: 'chronic',
+    diagnosedAt: formData.year ? `${formData.year}-01-01` : null,
+    notes: formData.note?.trim() || null,
+  });
+
   const fetchHistory = async () => {
     try {
       const res = await api.get('/history');
@@ -40,7 +53,7 @@ const MedicalHistory = () => {
 
   const handleEdit = (item) => {
     setEditingId(item.id);
-    setFormData({ diseaseName: item.diseaseName, year: item.year, note: item.note || '' });
+    setFormData(toFormData(item));
     setModalOpen(true);
   };
 
@@ -54,8 +67,8 @@ const MedicalHistory = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     if (!formData.diseaseName.trim()) {
       alert('Vui lòng nhập tên bệnh');
       return;
@@ -63,9 +76,9 @@ const MedicalHistory = () => {
     setSubmitting(true);
     try {
       if (editingId) {
-        await api.put(`/history/${editingId}`, formData);
+        await api.put(`/history/${editingId}`, toApiPayload());
       } else {
-        await api.post('/history', formData);
+        await api.post('/history', toApiPayload());
       }
       setModalOpen(false);
       fetchHistory();
@@ -103,9 +116,9 @@ const MedicalHistory = () => {
               <div key={item.id} className="glass-card p-5 rounded-2xl border-white/5 hover:border-[#00F0FF]/30 transition-all">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-bold text-lg text-white">{item.diseaseName}</h3>
-                    <p className="text-sm text-gray-400 mt-1">📅 Năm: {item.year}</p>
-                    {item.note && <p className="text-xs text-gray-500 mt-2">{item.note}</p>}
+                    <h3 className="font-bold text-lg text-white">{item.condition}</h3>
+                    <p className="text-sm text-gray-400 mt-1">📅 Năm: {item.diagnosedAt ? new Date(item.diagnosedAt).getFullYear() : 'N/A'}</p>
+                    {item.notes && <p className="text-xs text-gray-500 mt-2">{item.notes}</p>}
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleEdit(item)} className="text-[#00F0FF] hover:text-white">✏️</button>
@@ -118,13 +131,12 @@ const MedicalHistory = () => {
         )}
       </div>
 
-      {/* Modal thêm/sửa - đã sửa giao diện input */}
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? 'Sửa bệnh' : 'Thêm bệnh nền'}>
         <form onSubmit={handleSubmit}>
           <Input
             label="Tên bệnh"
             value={formData.diseaseName}
-            onChange={(e) => setFormData({ ...formData, diseaseName: e.target.value })}
+            onChange={(event) => setFormData({ ...formData, diseaseName: event.target.value })}
             required
             className="bg-white text-black placeholder-gray-400"
           />
@@ -132,14 +144,14 @@ const MedicalHistory = () => {
             label="Năm chẩn đoán"
             type="number"
             value={formData.year}
-            onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+            onChange={(event) => setFormData({ ...formData, year: event.target.value })}
             required
             className="bg-white text-black placeholder-gray-400"
           />
           <Input
             label="Ghi chú (thuốc đang dùng...)"
             value={formData.note}
-            onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+            onChange={(event) => setFormData({ ...formData, note: event.target.value })}
             className="bg-white text-black placeholder-gray-400"
           />
           <div className="flex justify-end gap-3 mt-4">

@@ -7,7 +7,7 @@ class SymptomController {
     this.#symptomService = symptomService
   }
 
-  getAll = async (req, res, next) => {
+  async getAll(req, res, next) {
     try {
       const result = await this.#symptomService.getSymptomsForSelection()
       res.json(ApiResponse.success(result))

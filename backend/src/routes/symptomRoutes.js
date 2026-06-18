@@ -2,33 +2,13 @@ const { Router } = require('express')
 const Joi = require('joi')
 const authenticate = require('../middlewares/auth')
 const validate = require('../middlewares/validate')
-
-const SymptomController = require('../controllers/SymptomController')
-const SymptomService = require('../services/SymptomService')
-const SymptomRepository = require('../repositories/SymptomRepository')
-
-const RecommendationController = require('../controllers/RecommendationController')
-const RecommendationService = require('../services/RecommendationService')
-const PatientHistoryRepository = require('../repositories/PatientHistoryRepository')
-const AllergyRepository = require('../repositories/AllergyRepository')
-const RecommendationRepository = require('../repositories/RecommendationRepository')
-
-const pool = require('../config/db')
-const redisClient = require('../config/redis')
+const container = require('../config/container')
 
 const router = Router()
 
-// ── Symptom list DI ──────────────────────────────────────────────────────────
-const symptomRepo       = new SymptomRepository(pool)
-const symptomService    = new SymptomService(symptomRepo, redisClient)
-const symptomController = new SymptomController(symptomService)
-
-// ── Recommendation DI ────────────────────────────────────────────────────────
-const patientHistoryRepo       = new PatientHistoryRepository(pool)
-const allergyRepo              = new AllergyRepository(pool)
-const recommendationRepo       = new RecommendationRepository(pool)
-const recommendationService    = new RecommendationService(patientHistoryRepo, allergyRepo, recommendationRepo, redisClient)
-const recommendationController = new RecommendationController(recommendationService)
+// Resolve controllers from DI container
+const symptomController = container.resolve('symptomController')
+const recommendationController = container.resolve('recommendationController')
 
 // ── Validation schema ────────────────────────────────────────────────────────
 const checkSchema = Joi.object({
@@ -45,7 +25,7 @@ const checkSchema = Joi.object({
 })
 
 // ── Routes ───────────────────────────────────────────────────────────────────
-router.get('/',      authenticate, symptomController.getAll)
-router.post('/check', authenticate, validate(checkSchema), recommendationController.check)
+router.get('/',      authenticate, symptomController.getAll.bind(symptomController))
+router.post('/check', authenticate, validate(checkSchema), recommendationController.check.bind(recommendationController))
 
 module.exports = router

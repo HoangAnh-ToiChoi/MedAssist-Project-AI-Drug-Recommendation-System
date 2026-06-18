@@ -62,6 +62,20 @@ const SymptomSelector = ({ selected, onAdd, onRemove }) => {
             placeholder="Tìm ví dụ: đau đầu, ho, sốt, sổ mũi..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                const trimmed = search.trim()
+                if (trimmed) {
+                  if (filtered.length > 0 && filtered[0]?.name) {
+                    onAdd(filtered[0].name)
+                  } else {
+                    onAdd(trimmed)
+                  }
+                  setSearch('')
+                }
+              }
+            }}
             className="input-field pl-10"
           />
           <svg className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
