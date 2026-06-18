@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
@@ -13,6 +14,7 @@ const MedicalHistory = () => {
   const [formData, setFormData] = useState({ diseaseName: '', year: '', note: '' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const toFormData = (item) => ({
     diseaseName: item.condition || '',
@@ -30,10 +32,9 @@ const MedicalHistory = () => {
   const fetchHistory = async () => {
     try {
       const res = await api.get('/history');
-      setRecords(res.data.data || []);
-      setError('');
+      setRecords(res.data.data || res.data || []);
     } catch (err) {
-      console.error('Fetch medical history failed:', err.response?.data || err);
+      console.error(err);
       setError('Không thể tải dữ liệu');
     } finally {
       setLoading(false);
@@ -58,39 +59,31 @@ const MedicalHistory = () => {
 
   const handleDelete = async (id) => {
     if (!confirm('Bạn có chắc muốn xóa bệnh nền này?')) return;
-
     try {
       await api.delete(`/history/${id}`);
       fetchHistory();
     } catch (err) {
-      console.error('Delete medical history failed:', err.response?.data || err);
-      alert(err.response?.data?.message || 'Xóa thất bại');
+      alert('Xóa thất bại');
     }
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     if (!formData.diseaseName.trim()) {
       alert('Vui lòng nhập tên bệnh');
       return;
     }
-
     setSubmitting(true);
     try {
-      const payload = toApiPayload();
-
       if (editingId) {
-        await api.put(`/history/${editingId}`, payload);
+        await api.put(`/history/${editingId}`, toApiPayload());
       } else {
-        await api.post('/history', payload);
+        await api.post('/history', toApiPayload());
       }
-
       setModalOpen(false);
       fetchHistory();
     } catch (err) {
-      console.error('Save medical history failed:', err.response?.data || err);
-      alert(err.response?.data?.message || 'Lưu thất bại');
+      alert('Lưu thất bại');
     } finally {
       setSubmitting(false);
     }
@@ -124,9 +117,7 @@ const MedicalHistory = () => {
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="font-bold text-lg text-white">{item.condition}</h3>
-                    <p className="text-sm text-gray-400 mt-1">
-                      📅 Năm: {item.diagnosedAt ? new Date(item.diagnosedAt).getFullYear() : 'Chưa cập nhật'}
-                    </p>
+                    <p className="text-sm text-gray-400 mt-1">📅 Năm: {item.diagnosedAt ? new Date(item.diagnosedAt).getFullYear() : 'N/A'}</p>
                     {item.notes && <p className="text-xs text-gray-500 mt-2">{item.notes}</p>}
                   </div>
                   <div className="flex gap-2">
@@ -142,11 +133,29 @@ const MedicalHistory = () => {
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? 'Sửa bệnh' : 'Thêm bệnh nền'}>
         <form onSubmit={handleSubmit}>
-          <Input label="Tên bệnh" value={formData.diseaseName} onChange={(event) => setFormData({ ...formData, diseaseName: event.target.value })} required />
-          <Input label="Năm chẩn đoán" type="number" value={formData.year} onChange={(event) => setFormData({ ...formData, year: event.target.value })} required />
-          <Input label="Ghi chú (thuốc đang dùng...)" value={formData.note} onChange={(event) => setFormData({ ...formData, note: event.target.value })} />
+          <Input
+            label="Tên bệnh"
+            value={formData.diseaseName}
+            onChange={(event) => setFormData({ ...formData, diseaseName: event.target.value })}
+            required
+            className="bg-white text-black placeholder-gray-400"
+          />
+          <Input
+            label="Năm chẩn đoán"
+            type="number"
+            value={formData.year}
+            onChange={(event) => setFormData({ ...formData, year: event.target.value })}
+            required
+            className="bg-white text-black placeholder-gray-400"
+          />
+          <Input
+            label="Ghi chú (thuốc đang dùng...)"
+            value={formData.note}
+            onChange={(event) => setFormData({ ...formData, note: event.target.value })}
+            className="bg-white text-black placeholder-gray-400"
+          />
           <div className="flex justify-end gap-3 mt-4">
-            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Hủy</Button>
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>Hủy</Button>
             <Button type="submit" loading={submitting}>Lưu</Button>
           </div>
         </form>

@@ -121,18 +121,35 @@ const Allergies = () => {
         )}
       </div>
 
+      {/* Modal thêm/sửa - đã sửa giao diện input */}
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? 'Sửa dị ứng' : 'Thêm dị ứng thuốc'}>
         <form onSubmit={handleSubmit}>
-          <Input label="Tên thuốc" value={formData.drugName} onChange={(e) => setFormData({ ...formData, drugName: e.target.value })} required />
+          <Input
+            label="Tên thuốc"
+            value={formData.drugName}
+            onChange={(e) => setFormData({ ...formData, drugName: e.target.value })}
+            required
+            className="bg-white text-black placeholder-gray-400"
+          />
           <div className="mb-4">
             <label className="block text-xs font-semibold text-gray-400 mb-1">Mức độ</label>
-            <select value={formData.severity} onChange={(e) => setFormData({ ...formData, severity: e.target.value })} className="input-field">
+            <select
+              value={formData.severity}
+              onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
+              className="w-full bg-white text-black border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
               <option value="mild">Nhẹ</option>
               <option value="medium">Trung bình</option>
               <option value="severe">Nặng</option>
             </select>
           </div>
-          <Input label="Phản ứng (triệu chứng)" value={formData.reaction} onChange={(e) => setFormData({ ...formData, reaction: e.target.value })} placeholder="Ví dụ: nổi mề đay, khó thở..." />
+          <Input
+            label="Phản ứng (triệu chứng)"
+            value={formData.reaction}
+            onChange={(e) => setFormData({ ...formData, reaction: e.target.value })}
+            placeholder="Ví dụ: nổi mề đay, khó thở..."
+            className="bg-white text-black placeholder-gray-400"
+          />
           <div className="flex justify-end gap-3 mt-4">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Hủy</Button>
             <Button type="submit" loading={submitting}>Lưu</Button>
