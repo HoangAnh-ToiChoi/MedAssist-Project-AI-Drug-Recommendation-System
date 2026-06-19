@@ -74,6 +74,70 @@ const mockPool = {
       return { rows }
     }
 
+    if (sql.includes('SELECT id, name, generic_name FROM drugs') || sql.includes('SELECT id, name, generic_name, category FROM drugs')) {
+      const q = params && params[0] ? params[0].replace(/%/g, '').toLowerCase() : null
+      let rows = mockState.drugs
+      if (q) {
+        rows = rows.filter(
+          (item) =>
+            item.name.toLowerCase().includes(q) ||
+            item.generic_name.toLowerCase().includes(q)
+        )
+      }
+      return { rows }
+    }
+
+    if (sql.includes('UPDATE allergies')) {
+      const [id, userId, drugId, reactionType, severity] = params
+      const index = mockState.allergies.findIndex(
+        (item) => item.id === id && item.user_id === userId
+      )
+      if (index === -1) {
+        return { rows: [] }
+      }
+
+      const drug = mockState.drugs.find((item) => item.id === drugId)
+      if (!drug && drugId) {
+        const error = new Error('drug not found')
+        error.code = '23503'
+        throw error
+      }
+
+      const row = {
+        id,
+        user_id: userId,
+        drug_id: drugId || mockState.allergies[index].drug_id,
+        reaction_type: reactionType,
+        severity,
+        created_at: mockState.allergies[index].created_at,
+        drug_name: drug ? drug.name : null,
+        generic_name: drug ? (drug.generic_name || null) : null,
+      }
+
+      mockState.allergies[index] = {
+        id: row.id,
+        user_id: row.user_id,
+        drug_id: row.drug_id,
+        reaction_type: row.reaction_type,
+        severity: row.severity,
+        created_at: row.created_at,
+      }
+
+      return { rows: [row] }
+    }
+
+    if (sql.includes('DELETE FROM allergies')) {
+      const [id, userId] = params
+      const index = mockState.allergies.findIndex(
+        (item) => item.id === id && item.user_id === userId
+      )
+      if (index === -1) {
+        return { rowCount: 0 }
+      }
+      mockState.allergies.splice(index, 1)
+      return { rowCount: 1 }
+    }
+
     throw new Error(`Unexpected SQL in allergyRoutes.test: ${sql}`)
   },
 }
@@ -137,7 +201,7 @@ beforeEach(() => {
   ]
   mockState.allergies = [
     {
-      id: 'allergy-seed-1',
+      id: '33333333-3333-3333-3333-333333333333',
       user_id: 'user-1',
       drug_id: '11111111-1111-1111-1111-111111111111',
       reaction_type: 'rash',
@@ -145,7 +209,7 @@ beforeEach(() => {
       created_at: '2026-06-17T10:00:00.000Z',
     },
     {
-      id: 'allergy-seed-2',
+      id: '44444444-4444-4444-4444-444444444444',
       user_id: 'other-user',
       drug_id: '22222222-2222-2222-2222-222222222222',
       reaction_type: 'nausea',
@@ -284,5 +348,80 @@ test('POST /api/v1/allergies rejects invalid payload', async () => {
 
   assert.equal(response.statusCode, 400)
   assert.equal(response.body.success, false)
-  assert.match(response.body.message, /ID thuoc la bat buoc|Muc do di ung khong hop le/)
+  assert.match(response.body.message, /Vui long cung cap ID thuoc hoac Ten thuoc|Muc do di ung khong hop le/)
 })
+
+test('POST /api/v1/allergies resolves drugName with fuzzy/semantic match and creates allergy', async () => {
+  const token = createAccessToken('user-1')
+  const response = await requestJson({
+    method: 'POST',
+    path: '/api/v1/allergies',
+    token,
+    body: {
+      drugName: 'ibuprofen',
+      reactionType: 'rash',
+      severity: 'mild',
+    },
+  })
+
+  assert.equal(response.statusCode, 201)
+  assert.equal(response.body.success, true)
+  assert.equal(response.body.data.drug_name, 'Ibuprofen')
+})
+
+test('GET /api/v1/allergies/drugs returns list of drugs matching query', async () => {
+  const token = createAccessToken('user-1')
+  const response = await requestJson({
+    method: 'GET',
+    path: '/api/v1/allergies/drugs?q=ibu',
+    token,
+  })
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.body.success, true)
+  assert.ok(response.body.data.length >= 1)
+  assert.equal(response.body.data[0].name, 'Ibuprofen')
+})
+
+test('PUT /api/v1/allergies/:id updates severity and reactionType', async () => {
+  const token = createAccessToken('user-1')
+  const response = await requestJson({
+    method: 'PUT',
+    path: '/api/v1/allergies/33333333-3333-3333-3333-333333333333',
+    token,
+    body: {
+      drugId: '11111111-1111-1111-1111-111111111111',
+      reactionType: 'severe rash',
+      severity: 'severe',
+    },
+  })
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.body.success, true)
+  assert.equal(response.body.data.severity, 'severe')
+  assert.equal(response.body.data.reaction_type, 'severe rash')
+})
+
+test('DELETE /api/v1/allergies/:id deletes the allergy record', async () => {
+  const token = createAccessToken('user-1')
+  const deleteResponse = await requestJson({
+    method: 'DELETE',
+    path: '/api/v1/allergies/33333333-3333-3333-3333-333333333333',
+    token,
+  })
+
+  assert.equal(deleteResponse.statusCode, 200)
+  assert.equal(deleteResponse.body.success, true)
+
+  const listResponse = await requestJson({
+    method: 'GET',
+    path: '/api/v1/allergies',
+    token,
+  })
+
+  assert.equal(listResponse.statusCode, 200)
+  const exists = listResponse.body.data.some(item => item.id === '33333333-3333-3333-3333-333333333333')
+  assert.equal(exists, false)
+})
+
+

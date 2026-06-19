@@ -48,6 +48,58 @@ class AllergyRepository {
 
     return rows.map((row) => Allergy.fromRow(row)).filter(Boolean)
   }
+
+  async searchDrugs(query) {
+    if (!query || !query.trim()) {
+      const { rows } = await this.#pool.query(
+        `SELECT id, name, generic_name, category FROM drugs ORDER BY name ASC LIMIT 20`
+      )
+      return rows
+    }
+    const { rows } = await this.#pool.query(
+      `SELECT id, name, generic_name, category
+       FROM drugs
+       WHERE name ILIKE $1 OR generic_name ILIKE $1
+       ORDER BY name ASC
+       LIMIT 20`,
+      [`%${query.trim()}%`]
+    )
+    return rows
+  }
+
+  async getAllDrugs() {
+    const { rows } = await this.#pool.query(
+      `SELECT id, name, generic_name FROM drugs ORDER BY name ASC`
+    )
+    return rows
+  }
+
+  async updateAllergy({ id, userId, drugId, reactionType, severity }) {
+    const { rows } = await this.#pool.query(
+      `WITH updated AS (
+         UPDATE allergies
+         SET drug_id = $3,
+             reaction_type = $4,
+             severity = $5
+         WHERE id = $1 AND user_id = $2
+         RETURNING *
+       )
+       SELECT updated.*, drugs.name AS drug_name, drugs.generic_name
+       FROM updated
+       LEFT JOIN drugs ON updated.drug_id = drugs.id`,
+      [id, userId, drugId, reactionType || null, severity]
+    )
+    return rows[0]
+  }
+
+  async deleteAllergy(userId, id) {
+    const { rowCount } = await this.#pool.query(
+      `DELETE FROM allergies WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    )
+    return rowCount > 0
+  }
 }
 
 module.exports = AllergyRepository
+
