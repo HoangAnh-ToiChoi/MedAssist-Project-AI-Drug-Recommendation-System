@@ -130,7 +130,7 @@ const LOCAL_SYMPTOMS = [
   ['roi_loan_tieu_tien', 'Rối loạn tiểu tiện', 'R35', 'Tiểu nhiều, tiểu ít, đau hoặc buốt khi tiểu.'],
   ['ho_co_dom', 'Ho có đờm', 'R09.3', 'Ho kèm chất nhầy hoặc đờm từ đường hô hấp.'],
   ['dau_nguc', 'Đau ngực', 'R07', 'Đau hoặc tức ngực cần được đánh giá nguyên nhân.'],
-  ['noi_mun', 'Nổi mụn', 'L70', 'Tổn thương da do viêm hoặc bít tắc nang lông.'],
+  ['noi_mu', 'Nổi mụn', 'L70', 'Tổn thương da do viêm hoặc bít tắc nang lông.'],
 ];
 
 const CATEGORY_SYMPTOM_MAPPINGS = {
@@ -265,6 +265,34 @@ async function crawlWikipediaCategory(category, targetCount, report) {
 
 async function crawlDrugs(config, report) {
   const drugs = new Map();
+
+  for (const [name, category, dosage] of LOCAL_DRUGS) {
+    drugs.set(name.toLowerCase(), {
+      name,
+      generic_name: name,
+      category,
+      dosage_form: dosage,
+      contraindications: defaultContraindications(category, name),
+      description: 'Dữ liệu thuốc nền đã được kiểm tra thủ công trong MedAssist.',
+      source: 'Local curated',
+    });
+  }
+
+  try {
+    const fdaDrugs = await crawlOpenFdaIngredients(config.minDrugs, report);
+    for (const drug of fdaDrugs) {
+      const key = drug.name.toLowerCase();
+      if (!drugs.has(key)) drugs.set(key, drug);
+    }
+  } catch (error) {
+    report.warnings.push(`openFDA ingredient crawl failed: ${error.message}`);
+  }
+
+  if (drugs.size >= config.minDrugs) {
+    return Array.from(drugs.values()).slice(0, Math.max(config.minDrugs, drugs.size));
+  }
+
+  report.warnings.push('openFDA did not reach the requested minimum; using filtered Wikipedia fallback.');
   for (const [category, type, dosage] of DRUG_CATEGORIES) {
     if (drugs.size >= config.minDrugs + 80) break;
     try {
@@ -290,22 +318,64 @@ async function crawlDrugs(config, report) {
     }
   }
 
-  for (const [name, category, dosage] of LOCAL_DRUGS) {
-    const key = name.toLowerCase();
-    if (!drugs.has(key)) {
-      drugs.set(key, {
-        name,
-        generic_name: name,
-        category,
-        dosage_form: dosage,
-        contraindications: defaultContraindications(category, name),
-        description: 'Local curated fallback drug used by MedAssist.',
-        source: 'Local fallback',
-      });
-    }
+  return Array.from(drugs.values()).slice(0, Math.max(config.minDrugs, drugs.size));
+}
+
+async function crawlOpenFdaIngredients(minDrugs, report) {
+  const limit = Math.min(1000, Math.max(300, minDrugs + 100));
+  const url = `https://api.fda.gov/drug/drugsfda.json?count=products.active_ingredients.name.exact&limit=${limit}`;
+  const response = await http.get(url, { responseType: 'json', timeout: 60000 });
+  const rows = response.data?.results || [];
+  const drugs = [];
+
+  for (const row of rows) {
+    const name = normalizeFdaIngredient(row.term);
+    if (!name || isBadTitle(name, 'drug')) continue;
+    const category = inferDrugCategory(name);
+    drugs.push({
+      name,
+      generic_name: name,
+      category,
+      dosage_form: inferDosageForm(category),
+      contraindications: defaultContraindications(category, name),
+      description: `Hoạt chất được ghi nhận trong ${row.count || 0} hồ sơ sản phẩm thuốc openFDA.`,
+      source: 'openFDA',
+    });
   }
 
-  return Array.from(drugs.values()).slice(0, Math.max(config.minDrugs, drugs.size));
+  report.sources.push({ source: 'openFDA', detail: 'active ingredient frequency', records: drugs.length });
+  return drugs;
+}
+
+function normalizeFdaIngredient(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text || text.length > 150 || text.includes('UNKNOWN')) return '';
+  return text.toLowerCase().replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
+
+function inferDrugCategory(name) {
+  const text = name.toLowerCase();
+  if (/(cillin|cycline|mycin|floxacin|cef[a-z]|penicillin|sulfamethoxazole)/.test(text)) return 'antibiotic';
+  if (/(statin)/.test(text)) return 'statin';
+  if (/(pril)/.test(text)) return 'ace_inhibitor';
+  if (/(sartan)/.test(text)) return 'arb';
+  if (/(olol|dipine|hydrochlorothiazide)/.test(text)) return 'antihypertensive';
+  if (/(azole|nystatin|terbinafine)/.test(text)) return 'antifungal';
+  if (/(vir\b)/.test(text)) return 'antiviral';
+  if (/(setron)/.test(text)) return 'antiemetic';
+  if (/(prednis|dexamethasone|hydrocortisone|methylprednisolone)/.test(text)) return 'corticosteroid';
+  if (/(cetirizine|loratadine|fexofenadine|diphenhydramine)/.test(text)) return 'antihistamine';
+  if (/(omeprazole|pantoprazole|lansoprazole|esomeprazole)/.test(text)) return 'proton_pump_inhibitor';
+  if (/(metformin|insulin|glipizide|glyburide|sitagliptin)/.test(text)) return 'antidiabetic';
+  if (/(ibuprofen|naproxen|diclofenac|meloxicam|celecoxib|aspirin)/.test(text)) return 'nsaid';
+  if (/(acetaminophen|paracetamol|tramadol|morphine|oxycodone|hydrocodone)/.test(text)) return 'analgesic';
+  return 'other';
+}
+
+function inferDosageForm(category) {
+  if (category === 'bronchodilator') return 'inhaler';
+  if (category === 'antibiotic') return 'tablet_or_capsule';
+  return 'various';
 }
 
 async function crawlSymptoms(config, report) {
@@ -426,16 +496,16 @@ async function statusPage(source, url, report) {
 }
 
 function defaultContraindications(category, name) {
-  const fallback = `Do not use if allergic to ${name}. Consult a doctor before use.`;
+  const fallback = `Không dùng nếu dị ứng với ${name}. Cần tham khảo bác sĩ hoặc dược sĩ trước khi sử dụng.`;
   const byCategory = {
-    antibiotic: 'Avoid self-medication; use only when prescribed. Do not use if allergic to this antibiotic class.',
-    nsaid: 'Avoid in active gastric ulcer, severe kidney disease, NSAID allergy, and late pregnancy.',
-    analgesic: 'Use caution in severe liver disease, overdose risk, or allergy to the active ingredient.',
-    anticoagulant: 'Avoid in active bleeding or high bleeding risk unless prescribed and monitored.',
-    antiplatelet: 'Avoid in active bleeding or severe allergy unless prescribed.',
-    corticosteroid: 'Use caution with uncontrolled infection, diabetes, or long-term unsupervised use.',
-    bronchodilator: 'Use caution with unstable heart disease, arrhythmia, or uncontrolled hyperthyroidism.',
-    antidiabetic: 'Use caution with kidney/liver disease and hypoglycemia risk.',
+    antibiotic: 'Không tự ý sử dụng; chỉ dùng khi được kê đơn và không dùng nếu dị ứng với nhóm kháng sinh tương ứng.',
+    nsaid: 'Không dùng khi loét dạ dày đang tiến triển, suy thận nặng, dị ứng NSAID hoặc ở cuối thai kỳ.',
+    analgesic: 'Thận trọng khi bệnh gan nặng, có nguy cơ quá liều hoặc dị ứng hoạt chất.',
+    anticoagulant: 'Không dùng khi đang chảy máu hoặc có nguy cơ chảy máu cao nếu chưa được bác sĩ theo dõi.',
+    antiplatelet: 'Không dùng khi đang chảy máu hoặc dị ứng nghiêm trọng nếu chưa được kê đơn.',
+    corticosteroid: 'Thận trọng khi nhiễm trùng chưa kiểm soát, tiểu đường hoặc sử dụng kéo dài.',
+    bronchodilator: 'Thận trọng khi bệnh tim không ổn định, rối loạn nhịp hoặc cường giáp.',
+    antidiabetic: 'Thận trọng khi suy gan, suy thận hoặc có nguy cơ hạ đường huyết.',
   };
   return byCategory[category] || fallback;
 }
@@ -522,34 +592,59 @@ function buildSql(symptoms, drugs, mappings) {
     '-- Safe when symptoms already exist and when drugs were imported from CSV.',
     '-- No table is dropped and no existing drug is deleted.',
     '',
-    'INSERT INTO symptoms (code, name, icd10_code, description) VALUES',
+    'BEGIN;',
+    "CREATE TEMP TABLE tmp_medassist_symptoms (code TEXT, name TEXT, icd10_code TEXT, description TEXT) ON COMMIT DROP;",
+    'INSERT INTO tmp_medassist_symptoms (code, name, icd10_code, description) VALUES',
     symptoms
       .map((s) => `  (${sqlString(s.code)}, ${sqlString(s.name)}, ${sqlString(s.icd10_code)}, ${sqlString(s.description)})`)
-      .join(',\n') +
-      '\nON CONFLICT (code) DO UPDATE SET\n  name = EXCLUDED.name,\n  icd10_code = COALESCE(EXCLUDED.icd10_code, symptoms.icd10_code),\n  description = EXCLUDED.description;',
+      .join(',\n') + ';',
     '',
-    'WITH incoming(name, generic_name, category, dosage_form, contraindications, description) AS (',
-    'VALUES',
+    'UPDATE symptoms s',
+    'SET name = i.name,',
+    '    description = i.description,',
+    '    icd10_code = CASE',
+    '      WHEN i.icd10_code IS NULL THEN s.icd10_code',
+    '      WHEN NOT EXISTS (',
+    '        SELECT 1 FROM symptoms other',
+    '        WHERE other.icd10_code = i.icd10_code AND other.id <> s.id',
+    '      ) THEN i.icd10_code',
+    '      ELSE s.icd10_code',
+    '    END',
+    'FROM tmp_medassist_symptoms i',
+    'WHERE s.code = i.code;',
+    '',
+    'INSERT INTO symptoms (code, name, icd10_code, description)',
+    'SELECT i.code, i.name, i.icd10_code, i.description',
+    'FROM tmp_medassist_symptoms i',
+    'WHERE NOT EXISTS (SELECT 1 FROM symptoms s WHERE s.code = i.code)',
+    '  AND (',
+    '    i.icd10_code IS NULL',
+    '    OR NOT EXISTS (SELECT 1 FROM symptoms s WHERE s.icd10_code = i.icd10_code)',
+    '  );',
+    '',
+    'CREATE TEMP TABLE tmp_medassist_drugs (name TEXT, generic_name TEXT, category TEXT, dosage_form TEXT, contraindications TEXT, description TEXT) ON COMMIT DROP;',
+    'INSERT INTO tmp_medassist_drugs (name, generic_name, category, dosage_form, contraindications, description) VALUES',
     drugs
       .map(
         (d) =>
           `  (${sqlString(d.name)}, ${sqlString(d.generic_name)}, ${sqlString(d.category)}, ${sqlString(d.dosage_form)}, ${sqlString(d.contraindications)}, ${sqlString(d.description)})`,
       )
-      .join(',\n'),
-    ')',
+      .join(',\n') + ';',
     'INSERT INTO drugs (name, generic_name, category, dosage_form, contraindications, description)',
     'SELECT i.name, i.generic_name, i.category, i.dosage_form, i.contraindications, i.description',
-    'FROM incoming i',
+    'FROM tmp_medassist_drugs i',
     'WHERE NOT EXISTS (',
     '  SELECT 1 FROM drugs d',
     '  WHERE LOWER(BTRIM(d.name)) = LOWER(BTRIM(i.name))',
     ');',
     '',
+    'CREATE TEMP TABLE tmp_medassist_mappings (symptom_code TEXT, drug_name TEXT, confidence_score FLOAT) ON COMMIT DROP;',
+    'INSERT INTO tmp_medassist_mappings (symptom_code, drug_name, confidence_score) VALUES',
+    mappings.map((m) => `  (${sqlString(m.symptom_code)}, ${sqlString(m.drug_name)}, ${Number(m.confidence_score)})`).join(',\n') + ';',
+    '',
     'INSERT INTO drug_symptoms (drug_id, symptom_id, confidence_score)',
     'SELECT d.id, s.id, v.confidence_score',
-    'FROM (VALUES',
-    mappings.map((m) => `  (${sqlString(m.symptom_code)}, ${sqlString(m.drug_name)}, ${Number(m.confidence_score)})`).join(',\n'),
-    ') AS v(symptom_code, drug_name, confidence_score)',
+    'FROM tmp_medassist_mappings v',
     'JOIN symptoms s ON s.code = v.symptom_code',
     'JOIN LATERAL (',
     '  SELECT d0.id',
@@ -564,6 +659,7 @@ function buildSql(symptoms, drugs, mappings) {
     "SELECT 'symptoms' AS table_name, COUNT(*) AS total FROM symptoms",
     "UNION ALL SELECT 'drugs', COUNT(*) FROM drugs",
     "UNION ALL SELECT 'drug_symptoms', COUNT(*) FROM drug_symptoms;",
+    'COMMIT;',
     '',
   ].join('\n');
 }
@@ -573,6 +669,86 @@ function summarizeSources(records) {
     acc[record.source] = (acc[record.source] || 0) + 1;
     return acc;
   }, {});
+}
+
+function parseFirstCsvColumn(line) {
+  if (!line) return '';
+  if (!line.startsWith('"')) return line.split(',')[0].trim();
+  let value = '';
+  for (let index = 1; index < line.length; index += 1) {
+    if (line[index] === '"' && line[index + 1] === '"') {
+      value += '"';
+      index += 1;
+    } else if (line[index] === '"') {
+      break;
+    } else {
+      value += line[index];
+    }
+  }
+  return value.trim();
+}
+
+function readCsvNames(filePath) {
+  if (!fs.existsSync(filePath)) return [];
+  return fs
+    .readFileSync(filePath, 'utf8')
+    .split(/\r?\n/)
+    .slice(1)
+    .map(parseFirstCsvColumn)
+    .filter(Boolean);
+}
+
+function preservePreviousScrapeCleanup(outputDir) {
+  const reportPath = path.join(outputDir, 'scrape_report.json');
+  const previousCsvPath = path.join(outputDir, 'drugs_scraped.csv');
+  if (!fs.existsSync(reportPath) || !fs.existsSync(previousCsvPath)) return;
+
+  let previousReport;
+  try {
+    previousReport = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  } catch {
+    return;
+  }
+
+  if (!previousReport.record_sources?.drugs?.Wikipedia) return;
+
+  const originalCsvPath = path.resolve(__dirname, '../data/crawled/drugs_crawled.csv');
+  const protectedNames = new Set([
+    ...LOCAL_DRUGS.map(([name]) => name.toLowerCase()),
+    ...readCsvNames(originalCsvPath).map((name) => name.toLowerCase()),
+  ]);
+  const cleanupNames = readCsvNames(previousCsvPath).filter(
+    (name) => !protectedNames.has(name.toLowerCase()),
+  );
+  if (!cleanupNames.length) return;
+
+  const sql = [
+    '-- Cleanup for the previous low-quality Wikipedia drug batch.',
+    '-- Review the preview query before running the DELETE section.',
+    '-- Original curated drugs and referenced drugs are protected.',
+    'BEGIN;',
+    'CREATE TEMP TABLE tmp_bad_scraped_drug_names (name TEXT PRIMARY KEY) ON COMMIT DROP;',
+    'INSERT INTO tmp_bad_scraped_drug_names (name) VALUES',
+    cleanupNames.map((name) => `  (${sqlString(name)})`).join(',\n') + ';',
+    '',
+    '-- Preview rows targeted by this cleanup.',
+    'SELECT d.id, d.name, d.created_at',
+    'FROM drugs d',
+    'JOIN tmp_bad_scraped_drug_names b ON LOWER(BTRIM(b.name)) = LOWER(BTRIM(d.name))',
+    'ORDER BY d.name;',
+    '',
+    '-- Delete only unreferenced rows from that exact scraped batch.',
+    'DELETE FROM drugs d',
+    'USING tmp_bad_scraped_drug_names b',
+    'WHERE LOWER(BTRIM(b.name)) = LOWER(BTRIM(d.name))',
+    '  AND NOT EXISTS (SELECT 1 FROM drug_symptoms ds WHERE ds.drug_id = d.id)',
+    '  AND NOT EXISTS (SELECT 1 FROM allergies a WHERE a.drug_id = d.id)',
+    'RETURNING d.id, d.name;',
+    'COMMIT;',
+    '',
+  ].join('\n');
+
+  fs.writeFileSync(path.join(outputDir, 'cleanup_previous_scrape.sql'), sql, 'utf8');
 }
 
 async function main() {
@@ -585,6 +761,7 @@ async function main() {
   };
 
   fs.mkdirSync(config.outputDir, { recursive: true });
+  preservePreviousScrapeCleanup(config.outputDir);
 
   console.log('MedAssist scrape-more seed data');
   console.log(`Output dir: ${config.outputDir}`);

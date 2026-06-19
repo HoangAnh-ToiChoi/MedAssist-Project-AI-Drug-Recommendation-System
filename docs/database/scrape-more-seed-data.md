@@ -18,6 +18,7 @@ Default output:
 data/crawled/more/symptoms_scraped.csv
 data/crawled/more/drugs_scraped.csv
 data/crawled/more/drug_symptom_mappings_review.csv
+data/crawled/more/cleanup_previous_scrape.sql
 data/crawled/more/scrape_import.sql
 data/crawled/more/scrape_report.json
 ```
@@ -41,13 +42,15 @@ Therefore `drug_symptom_mappings_review.csv` is for reviewing the generated mapp
 ## Recommended Supabase import/repair flow
 
 1. Run the script.
-2. Open `data/crawled/more/scrape_import.sql`.
-3. Paste it into Supabase SQL Editor.
-4. Run the SQL.
+2. If the old Wikipedia drug CSV was already imported, open `cleanup_previous_scrape.sql` and review the preview query/explicit drug-name list.
+3. Run `cleanup_previous_scrape.sql` in Supabase SQL Editor to remove only unreferenced rows from that exact bad batch.
+4. Open `data/crawled/more/scrape_import.sql`.
+5. Paste it into Supabase SQL Editor and run it.
 
 Use this SQL even if `drugs_scraped.csv` was already imported. It will:
 
 - update existing symptoms by `code` instead of failing on duplicates such as `sot`;
+- skip a new symptom when its ICD-10 code already belongs to another existing symptom;
 - preserve the Vietnamese curated symptoms and ICD-10 codes;
 - skip drugs whose names already exist, without requiring a unique index;
 - resolve `symptom_code` and `drug_name` to UUIDs before inserting `drug_symptoms`;
@@ -57,4 +60,4 @@ The generated SQL uses `ON CONFLICT` for symptoms and mappings, so it is safe to
 
 `symptoms_scraped.csv` contains only newly scraped symptoms and excludes the original Vietnamese seed rows. Direct CSV import is still intended for a one-time import only; use `scrape_import.sql` for repeatable imports.
 
-Main data source is Wikipedia API because it is stable for scripts. DrugBank, DAV, CTDbase, and EBI are checked best-effort and recorded in `scrape_report.json`; if a site blocks script access or an API fails, the script continues with sources that are readable.
+Symptoms use the curated Vietnamese seed plus EBI OLS. Drugs use openFDA active ingredients as the main source. Wikipedia drug categories are fallback-only because those categories also contain research compounds, drug classes, and non-product pages. DrugBank, DAV, and CTDbase are checked best-effort and recorded in `scrape_report.json`.
