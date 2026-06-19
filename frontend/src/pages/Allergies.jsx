@@ -11,9 +11,13 @@ const Allergies = () => {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({ drugName: '', severity: 'medium', reaction: '' });
+  const [formData, setFormData] = useState({ drugName: '', drugId: '', severity: 'medium', reaction: '' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const [drugSuggestions, setDrugSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
   const fetchAllergies = async () => {
     try {
@@ -31,15 +35,44 @@ const Allergies = () => {
     fetchAllergies();
   }, []);
 
+  const handleDrugNameChange = async (val) => {
+    setFormData((prev) => ({ ...prev, drugName: val, drugId: '' }));
+    if (!val.trim()) {
+      setDrugSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    setSuggestionsLoading(true);
+    setShowSuggestions(true);
+    try {
+      const res = await api.get(`/allergies/drugs?q=${encodeURIComponent(val)}`);
+      setDrugSuggestions(res.data.data || res.data || []);
+    } catch (err) {
+      console.error('Không thể lấy gợi ý thuốc:', err);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  };
+
   const handleAdd = () => {
     setEditingId(null);
-    setFormData({ drugName: '', severity: 'medium', reaction: '' });
+    setFormData({ drugName: '', drugId: '', severity: 'medium', reaction: '' });
+    setDrugSuggestions([]);
+    setShowSuggestions(false);
     setModalOpen(true);
   };
 
   const handleEdit = (item) => {
     setEditingId(item.id);
-    setFormData({ drugName: item.drugName, severity: item.severity, reaction: item.reaction || '' });
+    setFormData({
+      drugName: item.drug_name || item.drugName || '',
+      drugId: item.drug_id || item.drugId || '',
+      severity: item.severity === 'moderate' ? 'medium' : (item.severity || 'medium'),
+      reaction: item.reaction_type || item.reaction || '',
+    });
+    setDrugSuggestions([]);
+    setShowSuggestions(false);
     setModalOpen(true);
   };
 
@@ -60,16 +93,25 @@ const Allergies = () => {
       return;
     }
     setSubmitting(true);
+
+    const payload = {
+      drugId: formData.drugId || undefined,
+      drugName: formData.drugId ? undefined : formData.drugName,
+      reactionType: formData.reaction,
+      severity: formData.severity === 'medium' ? 'moderate' : formData.severity,
+    };
+
     try {
       if (editingId) {
-        await api.put(`/allergies/${editingId}`, formData);
+        await api.put(`/allergies/${editingId}`, payload);
       } else {
-        await api.post('/allergies', formData);
+        await api.post('/allergies', payload);
       }
       setModalOpen(false);
       fetchAllergies();
     } catch (err) {
-      alert('Lưu thất bại');
+      const errMsg = err.response?.data?.message || 'Lưu thất bại';
+      alert(errMsg);
     } finally {
       setSubmitting(false);
     }
@@ -78,6 +120,7 @@ const Allergies = () => {
   const severityBadge = (severity) => {
     switch (severity) {
       case 'severe': return <span className="bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full text-xs">Nặng</span>;
+      case 'moderate':
       case 'medium': return <span className="bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded-full text-xs">Trung bình</span>;
       default: return <span className="bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full text-xs">Nhẹ</span>;
     }
@@ -106,9 +149,9 @@ const Allergies = () => {
               <div key={item.id} className="glass-card p-5 rounded-2xl border-white/5 hover:border-[#FF007F]/30 transition-all">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-bold text-lg text-white">💊 {item.drugName}</h3>
+                    <h3 className="font-bold text-lg text-white">💊 {item.drug_name || item.drugName}</h3>
                     <div className="mt-1">{severityBadge(item.severity)}</div>
-                    {item.reaction && <p className="text-xs text-gray-400 mt-2">📝 {item.reaction}</p>}
+                    {(item.reaction_type || item.reaction) && <p className="text-xs text-gray-400 mt-2">📝 {item.reaction_type || item.reaction}</p>}
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleEdit(item)} className="text-[#00F0FF] hover:text-white">✏️</button>
@@ -123,7 +166,55 @@ const Allergies = () => {
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? 'Sửa dị ứng' : 'Thêm dị ứng thuốc'}>
         <form onSubmit={handleSubmit}>
-          <Input label="Tên thuốc" value={formData.drugName} onChange={(e) => setFormData({ ...formData, drugName: e.target.value })} required />
+          <div className="relative mb-4">
+            <Input
+              label="Tên thuốc"
+              value={formData.drugName}
+              onChange={(e) => handleDrugNameChange(e.target.value)}
+              onFocus={() => {
+                if (formData.drugName.trim()) {
+                  setShowSuggestions(true);
+                }
+              }}
+              onBlur={() => {
+                setTimeout(() => setShowSuggestions(false), 200);
+              }}
+              required
+              autoComplete="off"
+            />
+            {showSuggestions && (
+              <div className="absolute z-50 left-0 right-0 mt-1 bg-white text-black border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {suggestionsLoading ? (
+                  <div className="p-3 text-xs text-gray-500">Đang tìm kiếm...</div>
+                ) : drugSuggestions.length === 0 ? (
+                  <div className="p-3 text-xs text-gray-500">
+                    Không thấy thuốc khớp. Hệ thống sẽ tự nhận diện bằng AI khi bạn lưu.
+                  </div>
+                ) : (
+                  drugSuggestions.map((drug) => (
+                    <button
+                      key={drug.id}
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          drugName: drug.name,
+                          drugId: drug.id,
+                        }));
+                        setShowSuggestions(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition-colors flex flex-col border-b border-gray-100 last:border-0"
+                    >
+                      <span className="font-semibold text-gray-800">{drug.name}</span>
+                      {drug.generic_name && (
+                        <span className="text-xs text-gray-500">Hoạt chất: {drug.generic_name}</span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <div className="mb-4">
             <label className="block text-xs font-semibold text-gray-400 mb-1">Mức độ</label>
             <select value={formData.severity} onChange={(e) => setFormData({ ...formData, severity: e.target.value })} className="input-field">
