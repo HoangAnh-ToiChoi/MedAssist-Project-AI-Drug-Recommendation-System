@@ -106,27 +106,50 @@ const LOCAL_DRUGS = [
 ];
 
 const LOCAL_SYMPTOMS = [
-  ['sot', 'Fever', 'R50'],
-  ['dau_dau', 'Headache', 'R51'],
-  ['ho', 'Cough', 'R05'],
-  ['met_moi', 'Fatigue', 'R53'],
-  ['buon_non', 'Nausea', 'R11'],
-  ['dau_bung', 'Abdominal pain', 'R10'],
-  ['kho_tho', 'Shortness of breath', 'R06'],
-  ['chay_mui', 'Runny nose', 'R09.8'],
-  ['dau_hong', 'Sore throat', 'J02'],
-  ['tieu_chay', 'Diarrhea', 'A09'],
-  ['tao_bon', 'Constipation', 'K59.0'],
-  ['chong_mat', 'Dizziness', 'R42'],
-  ['mat_ngu', 'Insomnia', 'G47.0'],
-  ['dau_lung', 'Back pain', 'M54'],
-  ['dau_khop', 'Joint pain', 'M25.5'],
-  ['phat_ban', 'Rash', 'R21'],
-  ['ngua', 'Itching', 'L29'],
-  ['sut_can', 'Weight loss', 'R63.4'],
-  ['an_khong_ngon', 'Loss of appetite', 'R63.0'],
-  ['dau_nguc', 'Chest pain', 'R07'],
+  ['sot', 'Sốt', 'R50', 'Nhiệt độ cơ thể tăng cao trên 37.5°C, thường là phản ứng của cơ thể với nhiễm trùng.'],
+  ['dau_dau', 'Đau đầu', 'R51', 'Đau hoặc khó chịu ở vùng đầu, có thể do căng thẳng, thiếu ngủ hoặc bệnh lý.'],
+  ['ho', 'Ho', 'R05', 'Phản xạ bảo vệ đường hô hấp, có thể là ho khan hoặc ho có đờm.'],
+  ['met_moi', 'Mệt mỏi', 'R53', 'Cảm giác kiệt sức, thiếu năng lượng hoặc khó tập trung.'],
+  ['buon_non', 'Buồn nôn', 'R11', 'Cảm giác muốn nôn và khó chịu ở dạ dày.'],
+  ['dau_bung', 'Đau bụng', 'R10', 'Đau hoặc khó chịu ở vùng bụng với nhiều mức độ khác nhau.'],
+  ['kho_tho', 'Khó thở', 'R06', 'Cảm giác hụt hơi hoặc không hít đủ không khí.'],
+  ['chay_mui', 'Chảy mũi', 'R09.8', 'Dịch chảy từ mũi, thường gặp khi cảm lạnh hoặc dị ứng.'],
+  ['dau_hong', 'Đau họng', 'J02', 'Đau, rát hoặc ngứa cổ họng và có thể khó nuốt.'],
+  ['tieu_chay', 'Tiêu chảy', 'A09', 'Đi ngoài phân lỏng nhiều lần trong ngày.'],
+  ['tao_bon', 'Táo bón', 'K59.0', 'Đi ngoài khó, ít lần hoặc phân cứng.'],
+  ['chong_mat', 'Chóng mặt', 'R42', 'Cảm giác xoay vòng hoặc mất thăng bằng.'],
+  ['mat_ngu', 'Mất ngủ', 'G47.0', 'Khó bắt đầu hoặc duy trì giấc ngủ.'],
+  ['dau_lung', 'Đau lưng', 'M54', 'Đau hoặc khó chịu ở vùng lưng.'],
+  ['dau_khop', 'Đau khớp', 'M25.5', 'Đau, sưng hoặc cứng khớp làm giảm vận động.'],
+  ['phat_ban', 'Phát ban', 'R21', 'Nổi mẩn hoặc thay đổi màu sắc, bề mặt da.'],
+  ['ngua', 'Ngứa', 'L29', 'Cảm giác khó chịu trên da gây nhu cầu gãi.'],
+  ['sut_can', 'Sụt cân', 'R63.4', 'Giảm cân không chủ đích có thể liên quan bệnh lý.'],
+  ['an_khong_ngon', 'Ăn không ngon', 'R63.0', 'Giảm hoặc mất cảm giác thèm ăn.'],
+  ['tim_dap_nhanh', 'Tim đập nhanh', 'R00.0', 'Nhịp tim nhanh hoặc cảm giác hồi hộp, đánh trống ngực.'],
+  ['sung_phu', 'Sưng phù', 'R60', 'Tích tụ dịch dưới da gây sưng, thường ở chân hoặc tay.'],
+  ['roi_loan_tieu_tien', 'Rối loạn tiểu tiện', 'R35', 'Tiểu nhiều, tiểu ít, đau hoặc buốt khi tiểu.'],
+  ['ho_co_dom', 'Ho có đờm', 'R09.3', 'Ho kèm chất nhầy hoặc đờm từ đường hô hấp.'],
+  ['dau_nguc', 'Đau ngực', 'R07', 'Đau hoặc tức ngực cần được đánh giá nguyên nhân.'],
+  ['noi_mun', 'Nổi mụn', 'L70', 'Tổn thương da do viêm hoặc bít tắc nang lông.'],
 ];
+
+const CATEGORY_SYMPTOM_MAPPINGS = {
+  analgesic: ['sot', 'dau_dau', 'dau_lung', 'dau_khop'],
+  nsaid: ['sot', 'dau_dau', 'dau_lung', 'dau_khop'],
+  antibiotic: ['sot', 'dau_hong', 'ho_co_dom'],
+  antihistamine: ['chay_mui', 'ngua', 'phat_ban'],
+  corticosteroid: ['phat_ban', 'kho_tho'],
+  bronchodilator: ['ho', 'kho_tho'],
+  antiemetic: ['buon_non'],
+  antidiarrheal: ['tieu_chay'],
+  laxative: ['tao_bon'],
+  proton_pump_inhibitor: ['dau_bung'],
+  h2_blocker: ['dau_bung'],
+  diuretic: ['sung_phu'],
+  antihypertensive: ['tim_dap_nhanh'],
+  ace_inhibitor: ['tim_dap_nhanh'],
+  arb: ['tim_dap_nhanh'],
+};
 
 const MAPPING_RULES = [
   [['fever', 'temperature', 'chills', 'headache', 'pain', 'ache'], ['analgesic', 'nsaid'], 0.78],
@@ -187,11 +210,18 @@ function isBadTitle(title, type) {
   if (bad.some((term) => text.includes(term))) return true;
   if (title.length < 3 || title.length > 100) return true;
   if (type === 'drug') {
-    const exact = ['drug', 'medication', 'pharmaceutical', 'therapy', 'treatment', 'medicine', 'clinical trial', 'law'];
-    return exact.includes(text);
+    const exact = [
+      'drug', 'medication', 'pharmaceutical', 'therapy', 'treatment', 'medicine',
+      'clinical trial', 'law', 'antibiotic', 'antibacterial', 'analgesic',
+      'antihistamine', 'corticosteroid', 'bronchodilator', 'antidepressant',
+    ];
+    if (exact.includes(text)) return true;
+    if (/^[a-z]-?\d[\d,.-]*$/i.test(title)) return true;
+    return false;
   }
   if (type === 'symptom') {
-    return ['signs and symptoms', 'medical sign', 'symptom'].includes(text);
+    const noisyTerms = ['diary', 'questionnaire', 'scale', 'score', 'screening', 'assessment', 'measurement'];
+    return ['signs and symptoms', 'medical sign', 'symptom'].includes(text) || noisyTerms.some((term) => text.includes(term));
   }
   return false;
 }
@@ -281,6 +311,16 @@ async function crawlDrugs(config, report) {
 async function crawlSymptoms(config, report) {
   const symptoms = new Map();
 
+  for (const [code, name, icd10, description] of LOCAL_SYMPTOMS) {
+    symptoms.set(code, {
+      code,
+      name,
+      icd10_code: icd10,
+      description,
+      source: 'Local curated Vietnamese',
+    });
+  }
+
   const ebiSymptoms = await crawlEbiSymptoms(report);
   for (const symptom of ebiSymptoms) {
     if (!symptoms.has(symptom.code)) symptoms.set(symptom.code, symptom);
@@ -306,18 +346,6 @@ async function crawlSymptoms(config, report) {
       }
     } catch (error) {
       report.warnings.push(`Wikipedia symptom category failed (${category}): ${error.message}`);
-    }
-  }
-
-  for (const [code, name, icd10] of LOCAL_SYMPTOMS) {
-    if (!symptoms.has(code)) {
-      symptoms.set(code, {
-        code,
-        name,
-        icd10_code: icd10,
-        description: 'Local curated fallback symptom used by MedAssist.',
-        source: 'Local fallback',
-      });
     }
   }
 
@@ -358,7 +386,7 @@ async function crawlEbiSymptoms(report) {
             code,
             name: label.slice(0, 100),
             icd10_code: '',
-            description: `Scraped from EBI OLS search (${doc.ontology_name || 'ontology'}).`,
+            description: (doc.description || [])[0] || `Clinical term from EBI OLS (${doc.ontology_name || 'ontology'}).`,
             source: 'EBI OLS',
           });
         }
@@ -434,6 +462,20 @@ function generateMappings(symptoms, drugs, minMappings) {
     });
   };
 
+  const symptomsByCode = new Map(symptoms.map((symptom) => [symptom.code, symptom]));
+  for (const drug of drugs) {
+    const symptomCodes = CATEGORY_SYMPTOM_MAPPINGS[drug.category] || [];
+    for (const symptomCode of symptomCodes) {
+      const symptom = symptomsByCode.get(symptomCode);
+      if (!symptom) continue;
+      const score = drug.category === 'antibiotic' ? 0.4 : 0.62;
+      const note = drug.category === 'antibiotic'
+        ? 'Category mapping only; antibiotic requires confirmed diagnosis and prescription.'
+        : `Curated category mapping: ${drug.category}`;
+      addMapping(symptom, drug, score, note);
+    }
+  }
+
   for (const symptom of symptoms) {
     const text = `${symptom.code} ${symptom.name}`.toLowerCase();
     for (const [keywords, categories, score] of MAPPING_RULES) {
@@ -475,11 +517,10 @@ function sqlString(value) {
 
 function buildSql(symptoms, drugs, mappings) {
   return [
-    '-- MedAssist scrape-more import',
+    '-- MedAssist scrape-more repair/import',
     '-- Generated by scripts/scrape-more-medical-data.js',
-    '-- Safe to run multiple times in Supabase SQL Editor.',
-    '',
-    'CREATE UNIQUE INDEX IF NOT EXISTS idx_drugs_name_unique ON drugs(name);',
+    '-- Safe when symptoms already exist and when drugs were imported from CSV.',
+    '-- No table is dropped and no existing drug is deleted.',
     '',
     'INSERT INTO symptoms (code, name, icd10_code, description) VALUES',
     symptoms
@@ -487,14 +528,22 @@ function buildSql(symptoms, drugs, mappings) {
       .join(',\n') +
       '\nON CONFLICT (code) DO UPDATE SET\n  name = EXCLUDED.name,\n  icd10_code = COALESCE(EXCLUDED.icd10_code, symptoms.icd10_code),\n  description = EXCLUDED.description;',
     '',
-    'INSERT INTO drugs (name, generic_name, category, dosage_form, contraindications, description) VALUES',
+    'WITH incoming(name, generic_name, category, dosage_form, contraindications, description) AS (',
+    'VALUES',
     drugs
       .map(
         (d) =>
           `  (${sqlString(d.name)}, ${sqlString(d.generic_name)}, ${sqlString(d.category)}, ${sqlString(d.dosage_form)}, ${sqlString(d.contraindications)}, ${sqlString(d.description)})`,
       )
-      .join(',\n') +
-      '\nON CONFLICT (name) DO UPDATE SET\n  generic_name = EXCLUDED.generic_name,\n  category = EXCLUDED.category,\n  dosage_form = EXCLUDED.dosage_form,\n  contraindications = EXCLUDED.contraindications,\n  description = EXCLUDED.description;',
+      .join(',\n'),
+    ')',
+    'INSERT INTO drugs (name, generic_name, category, dosage_form, contraindications, description)',
+    'SELECT i.name, i.generic_name, i.category, i.dosage_form, i.contraindications, i.description',
+    'FROM incoming i',
+    'WHERE NOT EXISTS (',
+    '  SELECT 1 FROM drugs d',
+    '  WHERE LOWER(BTRIM(d.name)) = LOWER(BTRIM(i.name))',
+    ');',
     '',
     'INSERT INTO drug_symptoms (drug_id, symptom_id, confidence_score)',
     'SELECT d.id, s.id, v.confidence_score',
@@ -502,9 +551,19 @@ function buildSql(symptoms, drugs, mappings) {
     mappings.map((m) => `  (${sqlString(m.symptom_code)}, ${sqlString(m.drug_name)}, ${Number(m.confidence_score)})`).join(',\n'),
     ') AS v(symptom_code, drug_name, confidence_score)',
     'JOIN symptoms s ON s.code = v.symptom_code',
-    'JOIN drugs d ON d.name = v.drug_name',
+    'JOIN LATERAL (',
+    '  SELECT d0.id',
+    '  FROM drugs d0',
+    '  WHERE LOWER(BTRIM(d0.name)) = LOWER(BTRIM(v.drug_name))',
+    '  ORDER BY d0.created_at NULLS LAST, d0.id',
+    '  LIMIT 1',
+    ') d ON TRUE',
     'ON CONFLICT (drug_id, symptom_id) DO UPDATE SET',
     '  confidence_score = EXCLUDED.confidence_score;',
+    '',
+    "SELECT 'symptoms' AS table_name, COUNT(*) AS total FROM symptoms",
+    "UNION ALL SELECT 'drugs', COUNT(*) FROM drugs",
+    "UNION ALL SELECT 'drug_symptoms', COUNT(*) FROM drug_symptoms;",
     '',
   ].join('\n');
 }
@@ -541,17 +600,25 @@ async function main() {
     report.warnings.push('Generated data did not reach one or more configured minimums.');
   }
 
-  await writeCsv(path.join(config.outputDir, 'symptoms_scraped.csv'), ['code', 'name', 'icd10_code', 'description'], symptoms);
+  const newSymptomsOnly = symptoms.filter((symptom) => symptom.source !== 'Local curated Vietnamese');
+  await writeCsv(
+    path.join(config.outputDir, 'symptoms_scraped.csv'),
+    ['code', 'name', 'icd10_code', 'description'],
+    newSymptomsOnly,
+  );
   await writeCsv(
     path.join(config.outputDir, 'drugs_scraped.csv'),
     ['name', 'generic_name', 'category', 'dosage_form', 'contraindications', 'description'],
     drugs,
   );
   await writeCsv(
-    path.join(config.outputDir, 'drug_symptoms_scraped.csv'),
+    path.join(config.outputDir, 'drug_symptom_mappings_review.csv'),
     ['symptom_code', 'drug_name', 'confidence_score', 'notes'],
     mappings,
   );
+
+  const obsoleteMappingCsv = path.join(config.outputDir, 'drug_symptoms_scraped.csv');
+  if (fs.existsSync(obsoleteMappingCsv)) fs.rmSync(obsoleteMappingCsv);
 
   fs.writeFileSync(path.join(config.outputDir, 'scrape_import.sql'), buildSql(symptoms, drugs, mappings), 'utf8');
   fs.writeFileSync(path.join(config.outputDir, 'scrape_report.json'), JSON.stringify(report, null, 2), 'utf8');
