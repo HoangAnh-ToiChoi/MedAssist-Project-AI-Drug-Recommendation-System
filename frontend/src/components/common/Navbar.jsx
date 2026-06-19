@@ -29,6 +29,8 @@ const Navbar = () => {
   const navLinks = [
     { to: '/dashboard', label: 'Bảng điều khiển' },
     { to: '/symptoms', label: 'Kiểm tra triệu chứng' },
+    { to: '/medical-history', label: 'Tiền sử bệnh lý' },
+    { to: '/allergies', label: 'Dị ứng thuốc' },
   ]
 
   const isActive = (path) => location.pathname === path
@@ -40,11 +42,11 @@ const Navbar = () => {
           
           {/* Logo */}
           <Link to="/dashboard" className="flex items-center space-x-2">
-            <span className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#00F0FF] to-[#8A2BE2] flex items-center justify-center font-bold text-black text-lg shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+            <span className="w-8 h-8 rounded-lg bg-gradient-to-tr from-teal-500 to-sky-600 flex items-center justify-center font-bold text-black text-lg shadow-[0_0_15px_rgba(20,184,166,0.3)]">
               M
             </span>
             <span className="text-lg font-bold tracking-tight text-white">
-              MedAssist <span className="text-[#00F0FF]">AI</span>
+              MedAssist <span className="text-teal-400">AI</span>
             </span>
           </Link>
 
@@ -62,7 +64,7 @@ const Navbar = () => {
               >
                 {link.label}
                 {isActive(link.to) && (
-                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#00F0FF] to-[#8A2BE2] rounded-full shadow-[0_0_10px_rgba(0,240,255,0.8)]"></span>
+                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-400 to-emerald-500 rounded-full shadow-[0_0_8px_rgba(20,184,166,0.6)]"></span>
                 )}
               </Link>
             ))}

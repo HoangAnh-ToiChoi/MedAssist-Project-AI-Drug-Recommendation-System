@@ -3,8 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    color-scheme: dark;
+  }
+
   body {
-    @apply font-sans text-gray-100 antialiased bg-[#0B0B0C] min-h-screen overflow-x-hidden;
+    @apply font-sans text-slate-100 antialiased bg-[#0B0F19] min-h-screen overflow-x-hidden;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -17,30 +21,30 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #0B0B0C;
+    background: #0B0F19;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
   }
 }
 
 @layer components {
   /* Glassmorphism Card */
   .glass-card {
-    background: rgba(20, 20, 23, 0.6);
+    background: rgba(17, 24, 39, 0.7);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 10px 30px 0 rgba(0, 0, 0, 0.25);
   }
 
   /* Neon Border Input */
   .input-field {
-    @apply w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#00F0FF]/50 focus:border-transparent transition-all duration-200;
+    @apply w-full bg-slate-950/40 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-transparent transition-all duration-200;
   }
 
   /* Glow Orbs */
@@ -48,26 +52,73 @@
     position: absolute;
     border-radius: 9999px;
     filter: blur(130px);
-    opacity: 0.15;
+    opacity: 0.1;
     pointer-events: none;
     z-index: 0;
   }
 
-  /* Neon Gradients Text */
+  /* Medical Gradients Text */
   .text-gradient-neon {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#00F0FF] via-[#8A2BE2] to-[#FF007F];
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-teal-400 via-sky-400 to-emerald-400;
   }
 
   .text-gradient-blue-purple {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#00F0FF] to-[#8A2BE2];
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-sky-400;
   }
 
-  /* Glow Button styles */
+  /* Button styles */
   .btn-gradient {
-    @apply relative overflow-hidden bg-gradient-to-r from-[#00F0FF] to-[#8A2BE2] text-white font-medium rounded-xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] active:scale-[0.98];
+    @apply relative overflow-hidden bg-gradient-to-r from-teal-500 to-sky-600 text-white font-medium rounded-xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(20,184,166,0.3)] active:scale-[0.98];
   }
 
   .btn-neon-outline {
-    @apply border border-[#00F0FF]/30 text-white hover:bg-[#00F0FF]/10 rounded-xl font-medium transition-all duration-300 hover:border-[#00F0FF] hover:shadow-[0_0_15px_rgba(0,240,255,0.2)];
+    @apply border border-teal-500/30 text-teal-400 hover:bg-teal-500/10 rounded-xl font-medium transition-all duration-300 hover:border-teal-500 hover:shadow-[0_0_15px_rgba(20,184,166,0.1)];
   }
 }
+
+@layer utilities {
+  @keyframes slideIn {
+    from {
+      transform: translateX(120%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideOut {
+    from {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateX(120%);
+      opacity: 0;
+    }
+  }
+
+  @keyframes toastProgress {
+    from {
+      width: 100%;
+    }
+    to {
+      width: 0%;
+    }
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .animate-slide-out {
+    animation: slideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .animate-toast-progress {
+    animation: toastProgress linear forwards;
+  }
+}
+
+
