@@ -41,6 +41,8 @@ Therefore `drug_symptom_mappings_review.csv` is for reviewing the generated mapp
 
 ## Recommended Supabase import/repair flow
 
+These generated files use self-contained CTE statements and do not use temporary tables. They can be run as a whole file or one complete `WITH ...` block at a time in Supabase SQL Editor. RLS does not need to be enabled or disabled for this import.
+
 1. Run the script.
 2. If the old Wikipedia drug CSV was already imported, open `cleanup_previous_scrape.sql` and review the preview query/explicit drug-name list.
 3. Run `cleanup_previous_scrape.sql` in Supabase SQL Editor to remove only unreferenced rows from that exact bad batch.
