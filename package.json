@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "scrape:more": "node scripts/scrape-more-medical-data.js"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
     "axios": "^1.16.1",
