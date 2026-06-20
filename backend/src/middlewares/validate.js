@@ -1,12 +1,35 @@
 const ApiResponse = require('../utils/ApiResponse')
 
-// Factory: nhận Joi schema, trả Express middleware
 const validate = (schema) => (req, res, next) => {
-  const { error } = schema.validate(req.body, { abortEarly: false, stripUnknown: true })
-  if (error) {
-    const message = error.details.map((d) => d.message).join('; ')
-    return res.status(400).json(ApiResponse.error(message, 'VALIDATION_ERROR'))
+  const options = {
+    abortEarly: false,
+    stripUnknown: true,
   }
+
+  if (typeof schema.validate === 'function') {
+    const { error, value } = schema.validate(req.body, options)
+
+    if (error) {
+      const message = error.details.map((detail) => detail.message).join('; ')
+      return res.status(400).json(ApiResponse.error(message, 'VALIDATION_ERROR'))
+    }
+
+    req.body = value
+    return next()
+  }
+
+  for (const source of ['params', 'query', 'body']) {
+    if (!schema[source]) continue
+
+    const { error, value } = schema[source].validate(req[source], options)
+    if (error) {
+      const message = error.details.map((detail) => detail.message).join('; ')
+      return res.status(400).json(ApiResponse.error(message, 'VALIDATION_ERROR'))
+    }
+
+    req[source] = value
+  }
+
   next()
 }
 

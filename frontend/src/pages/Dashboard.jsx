@@ -1,8 +1,15 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/common/Navbar';
+import PageHeader from '../components/common/PageHeader';
+import SafetyChecklist from '../components/dashboard/SafetyChecklist';
+import FeatureCard from '../components/dashboard/FeatureCard';
+import api from '../services/api';
 
 const Dashboard = () => {
+  const [allergiesCount, setAllergiesCount] = useState(0);
+  const [historyCount, setHistoryCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
   const getStoredUser = () => {
     try {
       const stored = localStorage.getItem('user');
@@ -11,114 +18,141 @@ const Dashboard = () => {
       console.error('Failed to parse user from localStorage', e);
       return {};
     }
-  }
+  };
 
   const user = getStoredUser();
 
-  // Fake recent activities for a highly premium layout
+  useEffect(() => {
+    const fetchHealthProfileStatus = async () => {
+      try {
+        const [allergiesRes, historyRes] = await Promise.all([
+          api.get('/allergies'),
+          api.get('/history')
+        ]);
+        const allergiesData = allergiesRes.data?.data || allergiesRes.data || [];
+        const historyData = historyRes.data?.data || historyRes.data || [];
+        setAllergiesCount(allergiesData.length);
+        setHistoryCount(historyData.length);
+      } catch (err) {
+        console.error('Failed to fetch user safety checklist status:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHealthProfileStatus();
+  }, []);
+
+  // Professional recent activities list
   const recentActivities = [
-    { id: 1, date: 'Hôm nay, 10:24 AM', type: 'Kiểm tra triệu chứng', desc: 'Đau đầu, sốt nhẹ - Đã gợi ý Paracetamol', status: 'An toàn' },
-    { id: 2, date: '21 Tháng 5, 2026', type: 'Cập nhật dị ứng', desc: 'Đã thêm dị ứng thuốc Penicillin', status: 'Đã cập nhật' },
-    { id: 3, date: '18 Tháng 5, 2026', type: 'Tiền sử bệnh án', desc: 'Đã thêm tình trạng Cao huyết áp', status: 'Đã lưu' }
+    { 
+      id: 1, 
+      date: 'Hôm nay, 10:24 AM', 
+      type: 'Kiểm tra triệu chứng', 
+      desc: 'Hỗ trợ ban đầu cho triệu chứng mệt mỏi, khó ngủ.', 
+      status: 'Đã hoàn thành' 
+    },
+    { 
+      id: 2, 
+      date: 'Hôm qua, 02:15 PM', 
+      type: 'Khai báo dị ứng', 
+      desc: `Cập nhật thông tin dị ứng hoạt chất thuốc. (Tổng số hoạt chất dị ứng: ${allergiesCount})`, 
+      status: 'An toàn' 
+    },
+    { 
+      id: 3, 
+      date: '18 Tháng 6, 2026', 
+      type: 'Tiền sử bệnh án', 
+      desc: `Cập nhật hồ sơ bệnh nền cho hệ thống. (Tổng số bệnh nền: ${historyCount})`, 
+      status: 'Đã lưu' 
+    }
   ];
 
   return (
-    <div className="relative min-h-screen bg-[#0B0B0C] text-gray-100 flex flex-col font-sans">
+    <div className="relative min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col font-sans">
       {/* Background Glowing Orbs */}
-      <div className="bg-glow-orb w-[400px] h-[400px] bg-[#00F0FF]/10 top-[20%] left-[-10%]"></div>
-      <div className="bg-glow-orb w-[500px] h-[500px] bg-[#8A2BE2]/10 bottom-[-10%] right-[-10%]"></div>
+      <div className="bg-glow-orb w-[400px] h-[400px] bg-teal-500/5 top-[10%] left-[-10%]"></div>
+      <div className="bg-glow-orb w-[500px] h-[500px] bg-sky-500/5 bottom-[-10%] right-[-10%]"></div>
 
       <Navbar />
 
-      <div className="relative z-10 flex-grow container mx-auto px-6 py-10 max-w-6xl space-y-10">
+      <div className="relative z-10 flex-grow container mx-auto px-6 py-8 max-w-6xl space-y-8">
         
-        {/* Welcome Header Section */}
-        <div className="glass-card p-6 md:p-8 rounded-2xl border-white/5 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-[#00F0FF]/10 to-transparent rounded-bl-full"></div>
+        {/* Welcome Section */}
+        <div className="glass-card p-6 md:p-8 rounded-2xl border-teal-500/5 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-teal-500/5 to-transparent rounded-bl-full"></div>
           
-          <div className="space-y-2">
-            <h1 className="text-3xl font-extrabold tracking-tight">
+          <div className="space-y-1.5">
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
               Chào mừng trở lại, <span className="text-gradient-neon">{user.fullName || 'Thành viên'}</span>!
             </h1>
-            <p className="text-sm text-gray-400 max-w-xl">
-              Hệ thống trợ lý y tế MedAssist AI luôn sẵn sàng đồng hành cùng bạn. Hôm nay bạn cảm thấy thế nào? Hãy cập nhật triệu chứng để AI hỗ trợ bạn nhé.
+            <p className="text-xs md:text-sm text-slate-400 max-w-2xl leading-relaxed">
+              Trợ lý y tế thông minh MedAssist AI đồng hành giúp rà soát chống chỉ định thuốc. Vui lòng khai báo đầy đủ thông tin y tế để được bảo vệ tốt nhất.
             </p>
           </div>
 
           <div className="flex gap-4 items-center">
             <div className="text-right hidden sm:block">
-              <span className="text-xs text-gray-500 block">Tài khoản xác thực</span>
-              <span className="text-sm font-semibold text-[#00F0FF]">{user.email}</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Tài khoản xác thực</span>
+              <span className="text-sm font-semibold text-teal-400">{user.email}</span>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-[#00F0FF] to-[#8A2BE2] flex items-center justify-center font-extrabold text-black text-xl shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-teal-500 to-sky-600 flex items-center justify-center font-extrabold text-white text-lg shadow-lg">
               {(user.fullName || 'U').charAt(0).toUpperCase()}
             </div>
           </div>
         </div>
 
-        {/* Dashboard Grid Options */}
+        {/* Safety Checklist widget */}
+        {loading ? (
+          <div className="glass-card p-6 rounded-2xl animate-pulse flex flex-col gap-3">
+            <div className="h-4 w-1/3 bg-slate-800 rounded"></div>
+            <div className="h-3 w-2/3 bg-slate-800 rounded"></div>
+            <div className="h-6 w-1/2 bg-slate-800 rounded mt-2"></div>
+          </div>
+        ) : (
+          <SafetyChecklist 
+            hasAllergies={allergiesCount > 0} 
+            hasHistory={historyCount > 0} 
+          />
+        )}
+
+        {/* Main Feature Cards */}
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-gray-300 tracking-wide uppercase px-1">Chức năng chính</h2>
-          <div className="grid gap-6 md:grid-cols-3">
+          <h2 className="text-xs font-bold text-slate-500 tracking-wider uppercase px-1">Chức năng chính</h2>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             
-            {/* Card 1: Symptoms check */}
-            <Link 
-              to="/symptoms" 
-              className="group glass-card p-6 rounded-2xl border-white/5 hover:border-[#00F0FF]/30 transition-all duration-300 relative overflow-hidden hover:-translate-y-1"
-            >
-              <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-gradient-to-br from-[#00F0FF]/10 to-transparent rounded-full blur-xl group-hover:scale-150 transition-transform"></div>
-              <div className="w-10 h-10 rounded-xl bg-[#00F0FF]/10 border border-[#00F0FF]/20 flex items-center justify-center text-xl mb-6 shadow-[0_0_10px_rgba(0,240,255,0.1)] group-hover:scale-105 transition-transform">
-                💊
-              </div>
-              <h3 className="font-bold text-xl text-white mb-2 group-hover:text-[#00F0FF] transition-colors">Kiểm tra triệu chứng</h3>
-              <p className="text-xs text-gray-400 leading-relaxed mb-4">
-                Nhập triệu chứng cụ thể của bạn để nhận phân tích chi tiết và danh mục thuốc gợi ý an toàn từ AI.
-              </p>
-              <span className="text-xs font-semibold text-[#00F0FF] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                Kiểm tra ngay &rarr;
-              </span>
-            </Link>
+            <FeatureCard
+              title="Kiểm tra triệu chứng"
+              description="Khai báo các triệu chứng của bạn để nhận đề xuất hỗ trợ ban đầu và gợi ý thuốc tham khảo an toàn từ AI."
+              to="/symptoms"
+              icon="🔍"
+              status="Hỗ trợ ban đầu"
+              accentColor="teal"
+            />
 
-            {/* Card 2: Medical History */}
-            <div 
-              className="group glass-card p-6 rounded-2xl border-white/5 hover:border-[#8A2BE2]/30 transition-all duration-300 relative overflow-hidden cursor-pointer hover:-translate-y-1"
-            >
-              <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-gradient-to-br from-[#8A2BE2]/10 to-transparent rounded-full blur-xl group-hover:scale-150 transition-transform"></div>
-              <div className="w-10 h-10 rounded-xl bg-[#8A2BE2]/10 border border-[#8A2BE2]/20 flex items-center justify-center text-xl mb-6 shadow-[0_0_10px_rgba(138,43,226,0.1)] group-hover:scale-105 transition-transform">
-                🧬
-              </div>
-              <h3 className="font-bold text-xl text-white mb-2 group-hover:text-[#8A2BE2] transition-colors">Tiền sử bệnh lý</h3>
-              <p className="text-xs text-gray-400 leading-relaxed mb-4">
-                Đăng ký và lưu trữ bệnh nền (như huyết áp, tim mạch, tiểu đường) làm căn cứ kiểm duyệt thuốc.
-              </p>
-              <span className="text-xs font-semibold text-[#8A2BE2] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                Quản lý tiền sử &rarr;
-              </span>
-            </div>
+            <FeatureCard
+              title="Tiền sử bệnh lý"
+              description="Lưu trữ bệnh nền (hen suyễn, huyết áp, tiểu đường...) để AI đối chiếu và loại bỏ thuốc gây biến chứng."
+              to="/medical-history"
+              icon="📋"
+              status={`${historyCount} bệnh nền đã ghi nhận`}
+              accentColor="sky"
+            />
 
-            {/* Card 3: Allergies */}
-            <div 
-              className="group glass-card p-6 rounded-2xl border-white/5 hover:border-[#FF007F]/30 transition-all duration-300 relative overflow-hidden cursor-pointer hover:-translate-y-1"
-            >
-              <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-gradient-to-br from-[#FF007F]/10 to-transparent rounded-full blur-xl group-hover:scale-150 transition-transform"></div>
-              <div className="w-10 h-10 rounded-xl bg-[#FF007F]/10 border border-[#FF007F]/20 flex items-center justify-center text-xl mb-6 shadow-[0_0_10px_rgba(255,0,127,0.1)] group-hover:scale-105 transition-transform">
-                ⚠️
-              </div>
-              <h3 className="font-bold text-xl text-white mb-2 group-hover:text-[#FF007F] transition-colors">Dị ứng hoạt chất</h3>
-              <p className="text-xs text-gray-400 leading-relaxed mb-4">
-                Cập nhật danh sách các hoạt chất/thuốc dị ứng để hệ thống AI chủ động cảnh báo và ngăn chặn nguy cơ.
-              </p>
-              <span className="text-xs font-semibold text-[#FF007F] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                Cấu hình dị ứng &rarr;
-              </span>
-            </div>
+            <FeatureCard
+              title="Dị ứng thuốc"
+              description="Khai báo hoạt chất hoặc tên thuốc bạn bị dị ứng để trợ lý AI chủ động ngăn chặn và cảnh báo nguy cơ."
+              to="/allergies"
+              icon="⚠️"
+              status={`${allergiesCount} hoạt chất dị ứng`}
+              accentColor="amber"
+            />
 
           </div>
         </div>
 
-        {/* Recent Activities Timeline Section */}
+        {/* Recent Activities Section */}
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-gray-300 tracking-wide uppercase px-1">Hoạt động gần đây</h2>
+          <h2 className="text-xs font-bold text-slate-500 tracking-wider uppercase px-1">Hoạt động gần đây</h2>
           
           <div className="glass-card rounded-2xl p-6 border-white/5 space-y-6">
             <div className="flow-root">
@@ -127,30 +161,30 @@ const Dashboard = () => {
                   <li key={act.id}>
                     <div className="relative pb-8">
                       {actIdx !== recentActivities.length - 1 ? (
-                        <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-white/5" aria-hidden="true"></span>
+                        <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-slate-800" aria-hidden="true"></span>
                       ) : null}
                       
                       <div className="relative flex space-x-3 items-start">
                         <div>
-                          <span className={`h-8 w-8 rounded-lg flex items-center justify-center ring-4 ring-[#0B0B0C] ${
-                            act.id === 1 ? 'bg-[#00F0FF]/15 text-[#00F0FF]' : 
-                            act.id === 2 ? 'bg-[#FF007F]/15 text-[#FF007F]' : 'bg-[#8A2BE2]/15 text-[#8A2BE2]'
+                          <span className={`h-8 w-8 rounded-lg flex items-center justify-center ring-4 ring-[#0B0F19] ${
+                            act.id === 1 ? 'bg-teal-500/10 text-teal-400' : 
+                            act.id === 2 ? 'bg-amber-500/10 text-amber-400' : 'bg-sky-500/10 text-sky-400'
                           }`}>
-                            {act.id === 1 ? '💊' : act.id === 2 ? '⚠️' : '🧬'}
+                            {act.id === 1 ? '🔍' : act.id === 2 ? '⚠️' : '📋'}
                           </span>
                         </div>
                         
                         <div className="flex-grow min-w-0 flex justify-between gap-4">
                           <div>
-                            <p className="text-sm font-semibold text-white">{act.type}</p>
-                            <p className="text-xs text-gray-400 mt-1">{act.desc}</p>
+                            <p className="text-sm font-semibold text-slate-200">{act.type}</p>
+                            <p className="text-xs text-slate-400 mt-1">{act.desc}</p>
                           </div>
-                          <div className="text-right text-[10px] whitespace-nowrap text-gray-500 space-y-1">
-                            <time className="block">{act.date}</time>
-                            <span className={`inline-block px-2 py-0.5 rounded-full font-semibold border ${
-                              act.id === 1 ? 'bg-[#00F0FF]/5 border-[#00F0FF]/20 text-[#00F0FF]' : 
-                              act.id === 2 ? 'bg-[#FF007F]/5 border-[#FF007F]/20 text-[#FF007F]' : 
-                              'bg-[#8A2BE2]/5 border-[#8A2BE2]/20 text-[#8A2BE2]'
+                          <div className="text-right text-[10px] whitespace-nowrap text-slate-500 space-y-1">
+                            <time className="block font-medium">{act.date}</time>
+                            <span className={`inline-block px-2 py-0.5 rounded-full font-bold border text-[9px] uppercase tracking-wider ${
+                              act.id === 1 ? 'bg-teal-500/5 border-teal-500/10 text-teal-400' : 
+                              act.id === 2 ? 'bg-amber-500/5 border-amber-500/10 text-amber-400' : 
+                              'bg-sky-500/5 border-sky-500/10 text-sky-400'
                             }`}>
                               {act.status}
                             </span>

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Button from '../common/Button';
+import { useToast } from '../../context/ToastContext';
 import api from '../../services/api';
 
 const OtpVerification = () => {
+  const toast = useToast();
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,7 +35,7 @@ const OtpVerification = () => {
     setError('');
     try {
       await api.post('/auth/resend-otp', { email });
-      alert('Đã gửi lại mã OTP thành công!');
+      toast.success('Đã gửi lại mã OTP thành công! Vui lòng kiểm tra email của bạn.');
     } catch (err) {
       setError('Không thể gửi lại mã');
     }

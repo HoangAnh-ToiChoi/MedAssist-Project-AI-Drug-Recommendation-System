@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
-import DrugCard from '../components/symptoms/DrugCard';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import RecommendationCard from '../components/symptoms/RecommendationCard';
+import MedicalAlert from '../components/common/MedicalAlert';
 import EmptyState from '../components/common/EmptyState';
+import PageHeader from '../components/common/PageHeader';
 
 const DrugSuggestion = () => {
   const [recommendations, setRecommendations] = useState([]);
+  const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -15,79 +17,106 @@ const DrugSuggestion = () => {
     if (stored) {
       try {
         const data = JSON.parse(stored);
-        const drugs = data.recommendations || data || [];
+        
+        // Handle both raw array and wrapper object structures
+        const drugs = data.recommendations || (Array.isArray(data) ? data : []);
         setRecommendations(drugs);
+        setMeta(data.meta || null);
       } catch (err) {
-        console.error('Lỗi parse dữ liệu:', err);
+        console.error('Lỗi khi parse kết quả gợi ý:', err);
       }
     }
     setLoading(false);
   }, []);
 
+  // Helper check for critical warning symptoms
+  const hasDangerousSymptom = meta?.symptoms?.some((s) => {
+    const name = s.toLowerCase();
+    return name.includes('khó thở') || name.includes('đau ngực') || name.includes('sốt cao') || name.includes('ngất');
+  }) || false;
+
   return (
-    <div className="relative min-h-screen bg-[#0B0B0C] text-gray-100 flex flex-col font-sans">
+    <div className="relative min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col font-sans">
       {/* Background Glowing Orbs */}
-      <div className="bg-glow-orb w-[400px] h-[400px] bg-[#00F0FF]/10 top-[20%] left-[-10%]"></div>
-      <div className="bg-glow-orb w-[500px] h-[500px] bg-[#8A2BE2]/10 bottom-[-10%] right-[-10%]"></div>
+      <div className="bg-glow-orb w-[400px] h-[400px] bg-teal-500/5 top-[20%] left-[-10%]"></div>
+      <div className="bg-glow-orb w-[500px] h-[500px] bg-sky-500/5 bottom-[-10%] right-[-10%]"></div>
 
       <Navbar />
 
-      <div className="relative z-10 flex-grow container mx-auto px-6 py-12 max-w-3xl space-y-8">
+      <div className="relative z-10 flex-grow container mx-auto px-6 py-10 max-w-3xl space-y-6">
         
-        {/* Navigation back and header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-2">
-            <h1 className="text-3xl font-extrabold tracking-tight">
-              Phác Đồ <span className="text-gradient-neon">Gợi Ý Thuốc</span>
-            </h1>
-            <p className="text-sm text-gray-400">
-              Dựa trên danh sách các triệu chứng bạn cung cấp, hệ thống AI đề xuất các loại thuốc tham khảo dưới đây.
-            </p>
+        {/* Page Header */}
+        <PageHeader
+          title="💡 Gợi Ý Thuốc Tham Khảo"
+          description="Kết quả phân tích từ trợ lý AI dựa trên triệu chứng của bạn, đã đối chiếu loại trừ các thuốc chống chỉ định và dị ứng."
+          action={
+            <button
+              onClick={() => navigate('/symptoms')}
+              className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-800 text-slate-300 bg-slate-900/50 hover:bg-slate-800 transition-all flex items-center gap-1.5 focus:outline-none"
+            >
+              &larr; Thay đổi triệu chứng
+            </button>
+          }
+        />
+
+        {/* Filters Summary Panel */}
+        {meta && (
+          <div className="glass-card p-4 rounded-xl border-white/5 space-y-2">
+            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Thông số hồ sơ phân tích</h4>
+            <div className="grid gap-2 sm:grid-cols-3 text-xs">
+              <div>
+                <span className="text-slate-400 block font-medium">Triệu chứng:</span>
+                <span className="text-slate-200 font-semibold">{meta.symptoms?.join(', ') || 'Chưa rõ'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-medium">Đã đối chiếu dị ứng:</span>
+                <span className="text-teal-400 font-semibold">
+                  {meta.allergiesCount > 0 ? `${meta.allergiesCount} hoạt chất` : 'Đã đối chiếu (Trống)'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-medium">Đã đối chiếu bệnh nền:</span>
+                <span className="text-teal-400 font-semibold">
+                  {meta.historyCount > 0 ? `${meta.historyCount} bệnh lý` : 'Đã đối chiếu (Trống)'}
+                </span>
+              </div>
+            </div>
           </div>
+        )}
 
-          <button
-            onClick={() => navigate('/symptoms')}
-            className="self-start sm:self-center px-4 py-2 text-xs font-semibold rounded-xl border border-white/10 text-gray-300 bg-white/5 hover:bg-white/10 transition-all duration-300 flex items-center gap-1.5 focus:outline-none"
-          >
-            &larr; Thay đổi triệu chứng
-          </button>
-        </div>
+        {/* Warning Alerts */}
+        {hasDangerousSymptom && (
+          <MedicalAlert type="danger" title="Cảnh báo triệu chứng nguy hiểm">
+            Bạn đang có triệu chứng nghiêm trọng (khó thở, đau ngực, sốt cao...). Trợ lý AI khuyên bạn nên thăm khám bác sĩ hoặc liên hệ cơ sở y tế khẩn cấp ngay lập tức, không nên tự điều trị tại nhà.
+          </MedicalAlert>
+        )}
 
-        {/* Loading / Results Content */}
+        {/* Main Disclaimer Banner */}
+        <MedicalAlert type="warning" title="Khuyến cáo quan trọng">
+          Thông tin gợi ý dưới đây chỉ mang tính chất tham khảo ban đầu, không thay thế cho chỉ định điều trị và tư vấn chuyên môn của bác sĩ. Vui lòng tham khảo ý kiến nhân viên y tế trước khi dùng bất kỳ thuốc nào.
+        </MedicalAlert>
+
+        {/* Results Area */}
         {loading ? (
-          <div className="glass-card p-10 rounded-2xl border-white/5 flex items-center justify-center">
-            <LoadingSpinner text="AI đang đối chiếu dược lý học..." />
-          </div>
+          <div className="text-center py-20 text-slate-500 font-medium">Đang tải gợi ý thuốc tham khảo...</div>
         ) : recommendations.length === 0 ? (
           <EmptyState
-            title="Chưa có kết quả gợi ý"
-            description="Hệ thống chưa tìm thấy dữ liệu triệu chứng. Vui lòng quay trở lại trang nhập liệu để được AI hỗ trợ."
+            title="Không tìm thấy gợi ý phù hợp"
+            description="Dựa trên các triệu chứng và giới hạn bệnh lý/dị ứng của bạn, hệ thống AI không tìm thấy loại thuốc tham khảo nào phù hợp hoặc an toàn tuyệt đối."
             action={
               <button
                 onClick={() => navigate('/symptoms')}
-                className="btn-gradient px-6 py-3 rounded-xl text-sm font-semibold tracking-wide shadow-[0_0_15px_rgba(0,240,255,0.3)]"
+                className="btn-gradient px-6 py-3 rounded-xl text-sm font-semibold shadow-lg"
               >
-                Nhập triệu chứng ngay
+                Nhập triệu chứng khác
               </button>
             }
           />
         ) : (
-          <div className="space-y-6">
-            
-            {/* Caution Banner */}
-            <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl text-xs text-amber-300 leading-relaxed flex gap-3 items-start shadow-[0_0_15px_rgba(245,158,11,0.05)]">
-              <span className="text-lg">⚠️</span>
-              <p>
-                <strong>Khuyến cáo quan trọng:</strong> Kết quả trên được gợi ý tự động bằng mô hình Trí Tuệ Nhân Tạo (AI) dựa trên danh sách triệu chứng của bạn và chỉ mang tính chất tham khảo. Vui lòng tham vấn ý kiến Bác sĩ hoặc Dược sĩ chuyên môn trước khi sử dụng bất kỳ loại thuốc nào.
-              </p>
-            </div>
-
-            {/* Recommendations list */}
-            <div className="space-y-4">
-              {recommendations.map((drug, idx) => (
-                <DrugCard key={drug.id || idx} drug={drug} />
-              ))}
-            </div>
+          <div className="space-y-4">
+            {recommendations.map((drug, idx) => (
+              <RecommendationCard key={drug.id || idx} drug={drug} />
+            ))}
           </div>
         )}
       </div>

@@ -40,3 +40,9 @@ data/crawled/*.csv
 data/crawled/**/*.csv
 data/crawled/**/*.sql
 data/crawled/**/*.json
+
+# Claude, Codegraph, Cursor files
+.claude/
+.codegraph/
+.cursor/
+
