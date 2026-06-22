@@ -1,5 +1,8 @@
-const { Pool } = require('pg')
+const { Pool, types } = require('pg')
 const logger = require('../utils/logger')
+
+// Configure pg to return DATE (OID 1082) as a plain YYYY-MM-DD string to prevent timezone offset shifts
+types.setTypeParser(types.builtins.DATE, (val) => val)
 
 // Validate DATABASE_URL exists
 if (!process.env.DATABASE_URL) {
