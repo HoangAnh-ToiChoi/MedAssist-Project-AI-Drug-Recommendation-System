@@ -13,6 +13,7 @@ import Dashboard from './pages/Dashboard';
 import DrugSuggestion from './pages/DrugSuggestion';
 import MedicalHistory from './pages/MedicalHistory';
 import Allergies from './pages/Allergies';
+import ProfilePage from './pages/ProfilePage';
 
 // Admin (CHỈ ADMIN, KHÔNG CÓ PROFILE)
 import AdminLayout from './components/Layout/AdminLayout';
@@ -24,13 +25,13 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            {/* Public routes */}
+            {/* === PUBLIC ROUTES === */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/verify-otp" element={<OtpVerification />} />
 
-            {/* Protected routes */}
+            {/* === PROTECTED ROUTES (Cần đăng nhập) === */}
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Dashboard />
@@ -57,7 +58,14 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* Admin routes - yêu cầu role admin */}
+            {/* === PROFILE PAGE (Cần đăng nhập) === */}
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            } />
+
+            {/* === ADMIN ROUTES (Cần role admin) === */}
             <Route path="/admin" element={
               <ProtectedRoute requiredRole="admin">
                 <AdminLayout />
@@ -72,7 +80,7 @@ function App() {
               } />
             </Route>
 
-            {/* 404 */}
+            {/* === 404 NOT FOUND === */}
             <Route path="*" element={
               <div className="text-center py-20 text-slate-500">
                 404 - Trang không tồn tại
