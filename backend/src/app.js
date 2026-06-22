@@ -5,6 +5,7 @@ const authRoutes = require('./routes/authRoutes')
 const symptomRoutes = require('./routes/symptomRoutes')
 const historyRoutes = require('./routes/historyRoutes')
 const allergyRoutes = require('./routes/allergyRoutes')
+const profileRoutes = require('./routes/profileRoutes')
 
 const logger = require('./utils/logger')
 
@@ -45,6 +46,7 @@ app.use('/api/v1/auth', authRoutes)
 app.use('/api/v1/symptoms', symptomRoutes)
 app.use('/api/v1/history', historyRoutes)
 app.use('/api/v1/allergies', allergyRoutes)
+app.use('/api/v1/profile', profileRoutes)
 
 app.use(errorHandler)
 
