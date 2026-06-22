@@ -79,17 +79,23 @@ class AuthService {
     await this.#sendOtp(user.email, user.fullName)
   }
 
+  /**
+   * CHCKNSPC-110 — Anti User Enumeration (OWASP V2.7)
+   *
+   * Mọi trường hợp email/password sai đều trả về CÙNG message "Email hoặc mật khẩu không đúng"
+   * thông qua #handleFailedLogin(), bao gồm:
+   *   - Email không tồn tại (active)
+   *   - Email tồn tại nhưng chưa xác thực OTP (không tiết lộ trạng thái tài khoản)
+   *   - Mật khẩu sai
+   */
   async login(email, password) {
     const normalizedEmail = this.#normalizeEmail(email)
     await this.#assertLoginNotLocked(normalizedEmail)
 
     const user = await this.#userRepo.findByEmail(normalizedEmail)
     if (!user) {
-      const pendingUser = await this.#userRepo.findByEmailIncludingInactive(normalizedEmail)
-      if (pendingUser && !pendingUser.isVerified()) {
-        throw new AppError('Tài khoản chưa xác thực OTP', 403, 'ACCOUNT_NOT_VERIFIED')
-      }
-
+      // OWASP V2.7: Không phân biệt "email không tồn tại" vs "chưa xác thực OTP"
+      // Cả hai trường hợp đều bị xử lý như thông tin xác thực sai → 401 generic
       await this.#handleFailedLogin(normalizedEmail)
     }
 
@@ -102,10 +108,22 @@ class AuthService {
     return this.#generateTokens(user)
   }
 
+  /**
+   * CHCKNSPC-110 — Anti User Enumeration cho Forgot Password (OWASP V2.7)
+   *
+   * Dù email CÓ hay KHÔNG tồn tại trong hệ thống, luôn trả về cùng message thành công.
+   * Điều này ngăn hacker dùng endpoint này để dò tìm email đã đăng ký.
+   *
+   * @returns {{ message: string }} Message chung chung để controller render HTTP 200.
+   */
   async forgotPassword(email) {
+    const GENERIC_MESSAGE = 'Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đi.'
+
     const normalizedEmail = this.#normalizeEmail(email)
     const user = await this.#userRepo.findByEmail(normalizedEmail)
-    if (!user) return
+
+    // Email không tồn tại → im lặng, trả về message chung (KHÔNG throw 404)
+    if (!user) return { message: GENERIC_MESSAGE }
 
     const resetToken = crypto.randomBytes(32).toString('hex')
     await this.#redis.setEx(`reset:${resetToken}`, RESET_TOKEN_TTL_SECONDS, user.id)
@@ -115,7 +133,7 @@ class AuthService {
     if (process.env.NODE_ENV === 'development') {
       const logger = require('../utils/logger')
       logger.info(`[DEV] Reset token cho ${user.email} - Token: ${resetToken} - Link: ${resetLink}`)
-      return
+      return { message: GENERIC_MESSAGE }
     }
 
     await this.#emailTransporter.sendMail({
@@ -129,6 +147,8 @@ class AuthService {
         <p>Nếu bạn không yêu cầu điều này, hãy bỏ qua email này.</p>
       `,
     })
+
+    return { message: GENERIC_MESSAGE }
   }
 
   async resetPassword(token, newPassword) {
@@ -145,8 +165,13 @@ class AuthService {
     await user.changePassword(newPassword, bcrypt)
     await this.#userRepo.save(user)
     await this.#redis.del(`reset:${token}`)
+
+    // Thu hồi tất cả refresh token: xóa cả DB record lẫn Redis key
+    // Redis key phải bị xóa để vô hiệu hóa ngay lập tức mọi phiên đang active
     await this.#refreshTokenRepo.revokeAllByUserId(user.id)
+    await this.#redis.del(`refresh:${user.id}`)
   }
+
 
   /**
    * CHCKNSPC-109 — Refresh Token Rotation (Redis-based)
