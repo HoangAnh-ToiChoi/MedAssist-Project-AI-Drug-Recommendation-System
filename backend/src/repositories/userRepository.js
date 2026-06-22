@@ -70,6 +70,13 @@ class UserRepository {
     return User.fromRow(rows[0])
   }
 
+  async findAllUsers() {
+    const { rows } = await this.#pool.query(
+      'SELECT id, email, full_name, date_of_birth, gender, phone_number, role, is_active, created_at, updated_at FROM users ORDER BY created_at DESC'
+    )
+    return rows.map(row => User.fromRow(row))
+  }
+
   async save(user) {
     if (user.isNew()) {
       const { rows } = await this.#pool.query(
