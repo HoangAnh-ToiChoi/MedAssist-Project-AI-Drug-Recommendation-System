@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import RecommendationCard from '../components/symptoms/RecommendationCard';
 import DiseaseCandidateCard from '../components/symptoms/DiseaseCandidateCard';
+import RecommendationExplanationCard from '../components/symptoms/RecommendationExplanationCard';
 import MedicalAlert from '../components/common/MedicalAlert';
 import EmptyState from '../components/common/EmptyState';
 import PageHeader from '../components/common/PageHeader';
@@ -39,6 +40,7 @@ const DrugSuggestion = () => {
   const [topDiseases, setTopDiseases] = useState([]);
   const [matchedSymptoms, setMatchedSymptoms] = useState([]);
   const [dangerAlert, setDangerAlert] = useState('');
+  const [llmExplanation, setLlmExplanation] = useState(null);
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -55,6 +57,7 @@ const DrugSuggestion = () => {
         setTopDiseases(data.topDiseases || data.top_diseases || []);
         setMatchedSymptoms(data.matchedSymptoms || data.matched_symptoms || []);
         setDangerAlert(data.dangerAlert || data.danger_alert || '');
+        setLlmExplanation(data.llmExplanation || data.llm_explanation || null);
         setMeta(data.meta || null);
       } catch (err) {
         console.error('Lỗi khi parse kết quả gợi ý:', err);
@@ -168,23 +171,33 @@ const DrugSuggestion = () => {
         {loading ? (
           <div className="text-center py-20 text-slate-500 font-medium">Đang tải gợi ý thuốc tham khảo...</div>
         ) : recommendations.length === 0 ? (
-          <EmptyState
-            title="Không tìm thấy gợi ý phù hợp"
-            description="Dựa trên các triệu chứng và giới hạn bệnh lý/dị ứng của bạn, hệ thống AI không tìm thấy loại thuốc tham khảo nào phù hợp hoặc an toàn tuyệt đối."
-            action={
-              <button
-                onClick={() => navigate('/symptoms')}
-                className="btn-gradient px-6 py-3 rounded-xl text-sm font-semibold shadow-lg"
-              >
-                Nhập triệu chứng khác
-              </button>
-            }
-          />
+          <div className="space-y-4">
+            <EmptyState
+              title="Không tìm thấy gợi ý phù hợp"
+              description="Dựa trên các triệu chứng và giới hạn bệnh lý/dị ứng của bạn, hệ thống AI không tìm thấy loại thuốc tham khảo nào phù hợp hoặc an toàn tuyệt đối."
+              action={
+                <button
+                  onClick={() => navigate('/symptoms')}
+                  className="btn-gradient px-6 py-3 rounded-xl text-sm font-semibold shadow-lg"
+                >
+                  Nhập triệu chứng khác
+                </button>
+              }
+            />
+            {llmExplanation && (
+              <RecommendationExplanationCard explanation={llmExplanation} />
+            )}
+          </div>
         ) : (
           <div className="space-y-4">
-            {recommendations.map((drug, idx) => (
-              <RecommendationCard key={drug.id || idx} drug={drug} />
-            ))}
+            <div className="space-y-4">
+              {recommendations.map((drug, idx) => (
+                <RecommendationCard key={drug.id || idx} drug={drug} />
+              ))}
+            </div>
+            {llmExplanation && (
+              <RecommendationExplanationCard explanation={llmExplanation} />
+            )}
           </div>
         )}
       </div>

@@ -32,6 +32,7 @@ const createService = ({
   resolveSymptomsWithinSpecialty,
   findDiseaseGraphRecommendations,
   saveId,
+  aiEngines,
 }) =>
   new RecommendationService(
     {
@@ -50,13 +51,18 @@ const createService = ({
         return recommendation
       },
       async resolveSymptomCodesWithinSpecialty(specialty, symptoms) {
-        return resolveSymptomsWithinSpecialty(specialty, symptoms)
+        if (typeof resolveSymptomsWithinSpecialty === 'function') {
+          return resolveSymptomsWithinSpecialty(specialty, symptoms)
+        }
+
+        return symptoms
       },
       async findDiseaseGraphRecommendations(specialty, symptomCodes) {
         return findDiseaseGraphRecommendations(specialty, symptomCodes)
       },
     },
-    createRedisFailureMock()
+    createRedisFailureMock(),
+    aiEngines
   )
 
 test('checkSymptoms scopes normalization to specialty and survives redis failures', async () => {
@@ -111,6 +117,14 @@ test('checkSymptoms scopes normalization to specialty and survives redis failure
   assert.equal(result.topDiseases.length, 1)
   assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Paracetamol'])
   assert.equal(result.engineVersion, 'disease-graph-v1')
+  assert.deepEqual(result.llmExplanation, {
+    enabled: false,
+    status: 'disabled',
+    provider: null,
+    summary: 'Recommendations were finalized for specialty ho_hap using 2 matched symptom(s) and 1 safe option(s).',
+    explanation: 'Likely related conditions included Hen phe quan. The backend kept the grounded result authoritative, then removed allergy conflicts and history contraindications before ranking the remaining medications by confidence.',
+    safetyNote: 'This explanation is informational only and does not replace evaluation by a qualified clinician.',
+  })
 })
 
 test('checkSymptoms filters out recommendations contraindicated for patient history', async () => {
@@ -151,6 +165,7 @@ test('checkSymptoms filters out recommendations contraindicated for patient hist
 
   assert.equal(result.id, 'rec-2')
   assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Paracetamol'])
+  assert.equal(result.llmExplanation.status, 'disabled')
 })
 
 test('checkSymptoms filters drugs that match a recorded allergy ingredient', async () => {
@@ -196,6 +211,7 @@ test('checkSymptoms filters drugs that match a recorded allergy ingredient', asy
 
   assert.equal(result.id, 'rec-3')
   assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Ibuprofen'])
+  assert.equal(result.llmExplanation.status, 'disabled')
 })
 
 test('checkSymptoms rejects requests without specialty', async () => {
@@ -229,4 +245,104 @@ test('checkSymptoms throws service unavailable when disease-graph fallback fails
     service.checkSymptoms('user-1', 'ho_hap', ['sot']),
     (error) => error.code === 'RECOMMENDATION_UNAVAILABLE' && error.statusCode === 503
   )
+})
+
+test('checkSymptoms attaches AI explanation when engine returns one for grounded result', async () => {
+  const explanationPayloads = []
+  const service = createService({
+    saveId: 'rec-5',
+    aiEngines: [
+      {
+        provider: 'ai-service',
+        async getRecommendations(specialty, symptoms) {
+          assert.equal(specialty, 'than_kinh')
+          assert.deepEqual(symptoms, ['dau_dau'])
+          return {
+            engineVersion: 'ai-service-v2',
+            matchedSymptoms: ['dau_dau'],
+            topDiseases: [{ id: 'disease-5', code: 'migraine', displayName: 'Migraine', score: 0.87 }],
+            recommendations: [
+              {
+                name: 'Paracetamol 500mg',
+                generic_name: 'Paracetamol',
+                confidence: 0.9,
+                contraindications: '',
+              },
+            ],
+            dangerAlert: null,
+          }
+        },
+        async explainGroundedRecommendation(payload) {
+          explanationPayloads.push(payload)
+          return {
+            enabled: true,
+            status: 'success',
+            provider: 'ai-service',
+            summary: 'Grounded recommendation summary.',
+            explanation: 'Grounded recommendation explanation.',
+            safetyNote: 'Escalate care if symptoms worsen.',
+          }
+        },
+      },
+    ],
+  })
+
+  const result = await service.checkSymptoms('user-1', 'than_kinh', ['dau_dau'])
+
+  assert.equal(result.id, 'rec-5')
+  assert.equal(explanationPayloads.length, 1)
+  assert.deepEqual(explanationPayloads[0].recommendations, result.recommendations)
+  assert.deepEqual(result.llmExplanation, {
+    enabled: true,
+    status: 'success',
+    provider: 'ai-service',
+    summary: 'Grounded recommendation summary.',
+    explanation: 'Grounded recommendation explanation.',
+    safetyNote: 'Escalate care if symptoms worsen.',
+  })
+})
+
+test('checkSymptoms keeps recommendation success when AI explanation fails', async () => {
+  const service = createService({
+    history: ['Tang huyet ap'],
+    saveId: 'rec-6',
+    aiEngines: [
+      {
+        provider: 'ai-service',
+        async getRecommendations() {
+          return {
+            engineVersion: 'ai-service-v2',
+            matchedSymptoms: ['chong_mat'],
+            topDiseases: [{ id: 'disease-6', code: 'vertigo', displayName: 'Chong mat', score: 0.81 }],
+            recommendations: [
+              {
+                name: 'Betahistine 16mg',
+                generic_name: 'Betahistine',
+                confidence: 0.86,
+                contraindications: '',
+              },
+            ],
+            dangerAlert: 'Canh bao y te.',
+          }
+        },
+        async explainGroundedRecommendation() {
+          throw new Error('explanation timeout')
+        },
+      },
+    ],
+  })
+
+  const result = await service.checkSymptoms('user-1', 'than_kinh', ['chong_mat'])
+
+  assert.equal(result.id, 'rec-6')
+  assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Betahistine'])
+  assert.deepEqual(result.llmExplanation, {
+    enabled: true,
+    status: 'fallback',
+    provider: 'ai-service',
+    summary: 'Recommendations were finalized for specialty than_kinh using 1 matched symptom(s) and 1 safe option(s).',
+    explanation: 'Likely related conditions included Chong mat. The backend kept the grounded result authoritative, then removed allergy conflicts and history contraindications before ranking the remaining medications by confidence.',
+    safetyNote: 'Canh bao y te.',
+    error: 'explanation timeout',
+  })
 })

@@ -102,6 +102,18 @@ class RecommendationService {
       dangerAlert: aiResult.dangerAlert || null,
     }
 
+    result.llmExplanation = await this.#buildGroundedExplanation({
+      specialty: result.specialty,
+      inputSymptoms: normalizedSymptoms,
+      matchedSymptoms: result.matchedSymptoms,
+      topDiseases: result.topDiseases,
+      recommendations: result.recommendations,
+      history,
+      allergies,
+      dangerAlert: result.dangerAlert,
+      engineVersion: result.engineVersion,
+    })
+
     await this.#writeCache(cacheKey, result)
     return result
   }
@@ -273,6 +285,125 @@ class RecommendationService {
       503,
       'RECOMMENDATION_UNAVAILABLE',
     )
+  }
+
+  async #buildGroundedExplanation(payload) {
+    const explainEngine = this.#aiEngines.find(
+      (engine) => typeof engine?.explainGroundedRecommendation === 'function'
+    )
+
+    if (!explainEngine) {
+      return this.#buildFallbackExplanation(payload, {
+        enabled: false,
+        status: 'disabled',
+        provider: null,
+      })
+    }
+
+    try {
+      const explanation = await explainEngine.explainGroundedRecommendation(payload)
+      if (!explanation) {
+        return this.#buildFallbackExplanation(payload, {
+          enabled: false,
+          status: 'disabled',
+          provider: null,
+        })
+      }
+
+      return this.#normalizeLlmExplanation(explanation, payload, this.#resolveExplanationProvider(explainEngine))
+    } catch (err) {
+      logger.warn(
+        `[AI Explanation Warning] Engine ${explainEngine.constructor.name} failed: ${err.message}. Using deterministic fallback explanation.`
+      )
+
+      return this.#buildFallbackExplanation(payload, {
+        enabled: true,
+        status: 'fallback',
+        provider: this.#resolveExplanationProvider(explainEngine),
+        error: err.message,
+      })
+    }
+  }
+
+  #normalizeLlmExplanation(explanation, payload, fallbackProvider) {
+    if (!explanation || typeof explanation !== 'object') {
+      return this.#buildFallbackExplanation(payload, {
+        enabled: true,
+        status: 'fallback',
+        provider: fallbackProvider,
+        error: 'AI explanation returned an invalid payload.',
+      })
+    }
+
+    return {
+      enabled: explanation.enabled ?? true,
+      status: explanation.status || 'success',
+      provider: explanation.provider || fallbackProvider || null,
+      summary: String(explanation.summary || '').trim() || this.#buildFallbackSummary(payload),
+      explanation: String(explanation.explanation || '').trim() || this.#buildFallbackNarrative(payload),
+      safetyNote: String(explanation.safetyNote || '').trim() || this.#buildSafetyNote(payload),
+      ...(explanation.error ? { error: String(explanation.error) } : {}),
+    }
+  }
+
+  #buildFallbackExplanation(payload, options = {}) {
+    const explanation = {
+      enabled: options.enabled ?? false,
+      status: options.status || 'disabled',
+      provider: options.provider || null,
+      summary: this.#buildFallbackSummary(payload),
+      explanation: this.#buildFallbackNarrative(payload),
+      safetyNote: this.#buildSafetyNote(payload),
+    }
+
+    if (options.error) {
+      explanation.error = String(options.error)
+    }
+
+    return explanation
+  }
+
+  #buildFallbackSummary(payload) {
+    const matchedSymptoms = Array.isArray(payload.matchedSymptoms) ? payload.matchedSymptoms : []
+    const recommendationCount = Array.isArray(payload.recommendations) ? payload.recommendations.length : 0
+
+    if (matchedSymptoms.length === 0) {
+      return `Recommendations were finalized for specialty ${payload.specialty} with ${recommendationCount} safe option(s).`
+    }
+
+    return `Recommendations were finalized for specialty ${payload.specialty} using ${matchedSymptoms.length} matched symptom(s) and ${recommendationCount} safe option(s).`
+  }
+
+  #buildFallbackNarrative(payload) {
+    const diseaseNames = Array.isArray(payload.topDiseases)
+      ? payload.topDiseases
+        .map((disease) => disease?.displayName || disease?.name || disease?.code)
+        .filter(Boolean)
+        .slice(0, 3)
+      : []
+
+    const diseaseClause = diseaseNames.length > 0
+      ? `Likely related conditions included ${diseaseNames.join(', ')}. `
+      : ''
+
+    return `${diseaseClause}The backend kept the grounded result authoritative, then removed allergy conflicts and history contraindications before ranking the remaining medications by confidence.`
+  }
+
+  #buildSafetyNote(payload) {
+    if (payload.dangerAlert) {
+      return payload.dangerAlert
+    }
+
+    return 'This explanation is informational only and does not replace evaluation by a qualified clinician.'
+  }
+
+  #resolveExplanationProvider(engine) {
+    if (!engine) return null
+    if (typeof engine.provider === 'string' && engine.provider.trim()) {
+      return engine.provider.trim()
+    }
+
+    return engine.constructor?.name || 'unknown'
   }
 }
 

@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from routers.chat import router as chat_router
+from routers.recommendation import router as recommendation_router
 
 app = FastAPI(
     title="MedAssist AI - AI Service",
@@ -26,6 +27,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(chat_router)
+app.include_router(recommendation_router)
 
 @app.get("/health")
 def health_check():

@@ -2,11 +2,14 @@ import os
 import sys
 import asyncio
 from unittest.mock import patch, AsyncMock
+import pytest
 
 # Add parent directory to sys.path so we can import services
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.chatbot import chat_with_fallback, try_gemini, try_groq, try_zhipu
+
+pytestmark = pytest.mark.asyncio
 
 async def test_successful_gemini():
     print("Running Test 1: Gemini succeeds...")

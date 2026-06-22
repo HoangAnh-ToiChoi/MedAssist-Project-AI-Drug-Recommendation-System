@@ -172,6 +172,17 @@ cd ai-service
 RUN_LIVE_AI_TESTS=1 pytest -q
 ```
 
+### AI Phase 2026-06-22
+
+- Recommendation runtime hiện đi theo hướng `specialty -> disease -> symptom -> drug`, backend vẫn giữ quyền quyết định cuối cùng.
+- `ai-service` hiện có 2 vai trò:
+  - `POST /ai/recommend` cho recommendation engine nội bộ.
+  - `POST /ai/recommend/explain` cho lớp LLM explanation có grounding.
+- LLM chỉ dùng để diễn giải kết quả đã được backend lọc theo dị ứng, chống chỉ định và danger alert; không được tự thêm thuốc hoặc bệnh mới.
+- Chain provider hiện tại: `Gemini -> Groq -> Zhipu -> deterministic fallback`.
+- Frontend đã hiển thị block giải thích grounded/fallback ngay trên trang gợi ý thuốc, kể cả khi không còn thuốc an toàn sau bước lọc.
+- Tài liệu phase AI chi tiết xem thêm tại `docs/README.md`.
+
 ---
 
 ## 📅 Timeline 4 Sprint

@@ -2,6 +2,7 @@ import os
 import sys
 import asyncio
 from dotenv import load_dotenv
+import pytest
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -9,6 +10,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.chatbot import try_gemini, try_groq, try_zhipu, chat_with_fallback
 
 load_dotenv()
+
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.skipif(
+        os.getenv("RUN_LIVE_AI_TESTS") != "1",
+        reason="Live AI tests are disabled by default. Set RUN_LIVE_AI_TESTS=1 to enable.",
+    ),
+]
 
 async def test_live_apis():
     print("=== LIVE CHATBOT API KEYS VERIFICATION ===")
