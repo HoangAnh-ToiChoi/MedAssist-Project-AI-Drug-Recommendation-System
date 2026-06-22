@@ -16,6 +16,7 @@ const AllergyRepository = require('../repositories/AllergyRepository')
 const RecommendationRepository = require('../repositories/RecommendationRepository')
 const SymptomRepository = require('../repositories/SymptomRepository')
 const CachedSymptomRepository = require('../repositories/CachedSymptomRepository')
+const DiseaseGraphRepository = require('../repositories/DiseaseGraphRepository')
 
 // Services
 const AuthService = require('../services/authService')
@@ -23,6 +24,7 @@ const HistoryService = require('../services/HistoryService')
 const AllergyService = require('../services/AllergyService')
 const SymptomService = require('../services/SymptomService')
 const RecommendationService = require('../services/RecommendationService')
+const SpecialtyService = require('../services/SpecialtyService')
 
 // Controllers
 const AuthController = require('../controllers/authController')
@@ -30,6 +32,7 @@ const HistoryController = require('../controllers/HistoryController')
 const AllergyController = require('../controllers/AllergyController')
 const SymptomController = require('../controllers/SymptomController')
 const RecommendationController = require('../controllers/RecommendationController')
+const SpecialtyController = require('../controllers/SpecialtyController')
 
 const container = awilix.createContainer({
   injectionMode: awilix.InjectionMode.CLASSIC,
@@ -63,6 +66,8 @@ container.register({
   recommendationRepository: awilix.asClass(RecommendationRepository).singleton(),
   recommendationRepo: awilix.asFunction(() => container.resolve('recommendationRepository')).singleton(),
 
+  diseaseGraphRepository: awilix.asClass(DiseaseGraphRepository).singleton(),
+
   symptomRepositoryRaw: awilix.asClass(SymptomRepository).singleton(),
   symptomRepository: awilix.asFunction(() => new CachedSymptomRepository(
     container.resolve('symptomRepositoryRaw'),
@@ -75,6 +80,7 @@ container.register({
   allergyService: awilix.asClass(AllergyService).singleton(),
   symptomService: awilix.asClass(SymptomService).singleton(),
   recommendationService: awilix.asClass(RecommendationService).singleton(),
+  specialtyService: awilix.asClass(SpecialtyService).singleton(),
 
   // Controllers
   authController: awilix.asClass(AuthController).singleton(),
@@ -82,6 +88,7 @@ container.register({
   allergyController: awilix.asClass(AllergyController).singleton(),
   symptomController: awilix.asClass(SymptomController).singleton(),
   recommendationController: awilix.asClass(RecommendationController).singleton(),
+  specialtyController: awilix.asClass(SpecialtyController).singleton(),
 })
 
 module.exports = container

@@ -10,27 +10,53 @@ const CATEGORY_MAP = {
   'Da liễu': ['phat_ban', 'ngua', 'noi_mu', 'noi_mun']
 };
 
-const SymptomSelector = ({ selected = [], onAdd, onRemove }) => {
+const SymptomSelector = ({ specialty = '', selected = [], onAdd, onRemove }) => {
   const [symptoms, setSymptoms] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
+    if (!specialty) {
+      setSymptoms([]);
+      setLoading(false);
+      setError('');
+      setSearch('');
+      return;
+    }
+
+    let isMounted = true;
+
     const fetchSymptoms = async () => {
+      setLoading(true);
+      setError('');
+
       try {
-        const response = await api.get('/symptoms');
+        const response = await api.get(`/specialties/${encodeURIComponent(specialty)}/symptoms`);
         const data = response.data?.data || response.data || [];
-        setSymptoms(data);
+
+        if (isMounted) {
+          setSymptoms(data);
+        }
       } catch (err) {
         console.error(err);
-        setError('Không thể tải danh sách triệu chứng. Vui lòng thử lại sau.');
+        if (isMounted) {
+          setSymptoms([]);
+          setError('Không thể tải danh sách triệu chứng theo chuyên khoa. Vui lòng thử lại sau.');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
+
     fetchSymptoms();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [specialty]);
 
   const getSymptomCategory = (symptom) => {
     const code = String(symptom?.code || '').toLowerCase();
@@ -55,6 +81,21 @@ const SymptomSelector = ({ selected = [], onAdd, onRemove }) => {
     return matchesSearch;
   });
 
+  if (!specialty) {
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+            Tìm kiếm triệu chứng nhanh
+          </label>
+        </div>
+        <div className="border border-slate-800 bg-slate-950/30 rounded-xl px-4 py-5 text-sm text-slate-400">
+          Chọn chuyên khoa trước để hệ thống hiển thị danh sách triệu chứng phù hợp.
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-10 space-y-3">
@@ -62,7 +103,7 @@ const SymptomSelector = ({ selected = [], onAdd, onRemove }) => {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-        <span className="text-sm text-slate-500 font-medium">Đang tải danh mục triệu chứng y khoa...</span>
+        <span className="text-sm text-slate-500 font-medium">Đang tải danh mục triệu chứng theo chuyên khoa...</span>
       </div>
     );
   }
@@ -104,6 +145,14 @@ const SymptomSelector = ({ selected = [], onAdd, onRemove }) => {
           </svg>
         </div>
       </div>
+
+      {filteredSymptoms.length === 0 && (
+        <div className="text-center py-6 border border-slate-800 bg-slate-950/30 rounded-xl text-sm text-slate-400">
+          {symptoms.length === 0
+            ? 'Chưa có triệu chứng nào cho chuyên khoa này.'
+            : 'Không tìm thấy triệu chứng phù hợp với từ khóa bạn nhập.'}
+        </div>
+      )}
 
       {/* Grouped Lists */}
       <div className="space-y-5">

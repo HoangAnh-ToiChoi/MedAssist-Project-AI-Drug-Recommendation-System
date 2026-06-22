@@ -38,13 +38,21 @@ class RecommendationService {
     }
   }
 
-  async checkSymptoms(userId, symptoms) {
-    const resolvedSymptoms = await this.#recommendationRepo.resolveSymptomCodes(symptoms)
+  async checkSymptoms(userId, specialty, symptoms) {
+    const normalizedSpecialty = this.#normalizeSpecialty(specialty)
+    if (!normalizedSpecialty) {
+      throw new AppError('Specialty la bat buoc.', 400, 'SPECIALTY_REQUIRED')
+    }
+
+    const resolvedSymptoms = await this.#resolveSymptomsWithinSpecialty(
+      normalizedSpecialty,
+      symptoms
+    )
     const normalizedSymptoms = this.#normalizeSymptoms(
       resolvedSymptoms.length > 0 ? resolvedSymptoms : symptoms
     )
 
-    const cacheKey = this.#buildCacheKey(userId, normalizedSymptoms)
+    const cacheKey = this.#buildCacheKey(userId, normalizedSpecialty, normalizedSymptoms)
     const cached = await this.#readCache(cacheKey)
     if (cached) return cached
 
@@ -57,7 +65,12 @@ class RecommendationService {
       .map((item) => item.getCondition())
       .filter(Boolean)
 
-    const aiResult = await this.#callAiService(normalizedSymptoms, history, allergies)
+    const aiResult = await this.#callAiService(
+      normalizedSpecialty,
+      normalizedSymptoms,
+      history,
+      allergies
+    )
 
     aiResult.recommendations = this.#normalizeRecommendations(aiResult.recommendations)
       .filter((drug) => !this.#isDrugBlockedByAllergies(drug, allergies))
@@ -68,6 +81,7 @@ class RecommendationService {
     const recommendation = new Recommendation({
       userId,
       inputSymptoms: {
+        specialty: normalizedSpecialty,
         symptoms: normalizedSymptoms,
         history,
         allergies,
@@ -80,6 +94,9 @@ class RecommendationService {
     const saved = await this.#recommendationRepo.save(recommendation)
     const result = {
       id: saved.id,
+      specialty: normalizedSpecialty,
+      matchedSymptoms: this.#normalizeSymptoms(aiResult.matchedSymptoms || normalizedSymptoms),
+      topDiseases: Array.isArray(aiResult.topDiseases) ? aiResult.topDiseases : [],
       recommendations: aiResult.recommendations,
       engineVersion: aiResult.engineVersion,
       dangerAlert: aiResult.dangerAlert || null,
@@ -97,8 +114,24 @@ class RecommendationService {
     )].sort()
   }
 
-  #buildCacheKey(userId, symptoms) {
-    return `recommend:${userId}:${symptoms.join('-')}`
+  #normalizeSpecialty(specialty) {
+    return String(specialty || '').trim().toLowerCase()
+  }
+
+  async #resolveSymptomsWithinSpecialty(specialty, symptoms) {
+    if (typeof this.#recommendationRepo.resolveSymptomCodesWithinSpecialty === 'function') {
+      return this.#recommendationRepo.resolveSymptomCodesWithinSpecialty(specialty, symptoms)
+    }
+
+    if (typeof this.#recommendationRepo.resolveSymptomCodes === 'function') {
+      return this.#recommendationRepo.resolveSymptomCodes(symptoms)
+    }
+
+    return []
+  }
+
+  #buildCacheKey(userId, specialty, symptoms) {
+    return `recommend:${userId}:${specialty}:${symptoms.join('-')}`
   }
 
   async #readCache(cacheKey) {
@@ -205,7 +238,7 @@ class RecommendationService {
     return null
   }
 
-  async #callAiService(symptoms, history, allergies) {
+  async #callAiService(specialty, symptoms, history, allergies) {
     if (!this.#aiEngines || this.#aiEngines.length === 0) {
       throw new AppError(
         'Không thể tạo gợi ý thuốc vào lúc này. Vui lòng thử lại sau.',
@@ -217,7 +250,12 @@ class RecommendationService {
     const errors = []
     for (const engine of this.#aiEngines) {
       try {
-        const result = await engine.getRecommendations(symptoms, history, allergies)
+        const result = await engine.getRecommendations(
+          specialty,
+          symptoms,
+          history,
+          allergies
+        )
         if (result) {
           return result
         }

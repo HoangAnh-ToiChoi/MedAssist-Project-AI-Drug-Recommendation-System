@@ -17,6 +17,38 @@
 CREATE UNIQUE INDEX IF NOT EXISTS idx_drugs_name_unique ON drugs(name);
 
 -- ============================================================
+-- BƯỚC 0: DISEASE_TYPES (24 chuyên khoa)
+-- ============================================================
+INSERT INTO disease_types (code, name, display_order) VALUES
+  ('tim_mach',            'Tim mạch', 1),
+  ('da_lieu',             'Da liễu', 2),
+  ('noi_tiet',            'Nội tiết', 3),
+  ('tieu_hoa',            'Tiêu hóa', 4),
+  ('huyet_hoc',           'Huyết học', 5),
+  ('benh_truyen_nhiem',   'Bệnh truyền nhiễm', 6),
+  ('than',                'Thận', 7),
+  ('than_kinh',           'Thần kinh', 8),
+  ('ung_buou',            'Ung bướu', 9),
+  ('nhan_khoa',           'Nhãn khoa', 10),
+  ('chinh_hinh',          'Chỉnh hình', 11),
+  ('tai_mui_hong',        'Tai Mũi Họng', 12),
+  ('tam_than',            'Tâm thần', 13),
+  ('ho_hap',              'Hô hấp', 14),
+  ('thap_khop',           'Thấp khớp', 15),
+  ('tiet_nieu',           'Tiết niệu', 16),
+  ('cap_cuu',             'Cấp cứu', 17),
+  ('gia_dinh',            'Gia đình', 18),
+  ('noi_khoa',            'Nội khoa', 19),
+  ('nhi_khoa',            'Nhi khoa', 20),
+  ('san_phu_khoa',        'Sản Phụ khoa', 21),
+  ('chan_doan_hinh_anh',  'Chẩn đoán hình ảnh', 22),
+  ('gay_me',              'Gây mê', 23),
+  ('giai_phau_benh',      'Giải phẫu bệnh', 24)
+ON CONFLICT (code) DO UPDATE SET
+  name = EXCLUDED.name,
+  display_order = EXCLUDED.display_order;
+
+-- ============================================================
 -- BƯỚC 1: SYMPTOMS (25 triệu chứng)
 -- ============================================================
 INSERT INTO symptoms (code, name, icd10_code, description) VALUES

@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "scrape:more": "node scripts/scrape-more-medical-data.js"
+    "scrape:more": "node scripts/scrape-more-medical-data.js",
+    "seed:disease-graph": "node scripts/seed-disease-graph-data.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",

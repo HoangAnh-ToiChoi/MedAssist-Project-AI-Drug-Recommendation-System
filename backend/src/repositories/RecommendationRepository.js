@@ -6,9 +6,11 @@ const {
 
 class RecommendationRepository {
   #pool
+  #diseaseGraphRepository
 
-  constructor(pool) {
+  constructor(pool, diseaseGraphRepository) {
     this.#pool = pool
+    this.#diseaseGraphRepository = diseaseGraphRepository || null
   }
 
   async save(recommendation) {
@@ -60,6 +62,17 @@ class RecommendationRepository {
     return [...new Set(
       normalizedInputs.map((input) => resolvedByInput.get(input) || input)
     )]
+  }
+
+  async resolveSymptomCodesWithinSpecialty(specialtyCode, inputs) {
+    if (this.#diseaseGraphRepository) {
+      return this.#diseaseGraphRepository.resolveSymptomCodesWithinSpecialty(
+        specialtyCode,
+        inputs
+      )
+    }
+
+    return this.resolveSymptomCodes(inputs)
   }
 
   async findRecommendedDrugsBySymptomCodes(symptomCodes) {
@@ -119,6 +132,36 @@ class RecommendationRepository {
       dosage: DEFAULT_DOSAGE_GUIDANCE,
       contraindications: row.contraindications,
     }))
+  }
+
+  async findDiseaseGraphRecommendations(specialty, symptomCodes) {
+    if (!this.#diseaseGraphRepository) {
+      return {
+        matchedSymptoms: symptomCodes,
+        topDiseases: [],
+        recommendations: await this.findRecommendedDrugsBySymptomCodes(symptomCodes),
+      }
+    }
+
+    const topDiseases = await this.#diseaseGraphRepository.findDiseaseCandidatesBySymptomCodes(
+      specialty,
+      symptomCodes
+    )
+    const matchedSymptomCount = Array.isArray(symptomCodes) ? symptomCodes.length : 0
+    const rankedRecommendations = await this.#diseaseGraphRepository.findDrugCandidatesByDiseaseIds(
+      topDiseases.map((item) => item.id)
+    )
+    const recommendations = rankedRecommendations.map((item) => ({
+      ...item,
+      reason: item.reason || buildRecommendationReason(matchedSymptomCount),
+      dosage: item.dosage || DEFAULT_DOSAGE_GUIDANCE,
+    }))
+
+    return {
+      matchedSymptoms: symptomCodes,
+      topDiseases,
+      recommendations,
+    }
   }
 }
 

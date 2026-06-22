@@ -74,6 +74,77 @@ CREATE INDEX idx_drug_symptoms_drug_id    ON drug_symptoms(drug_id);
 CREATE INDEX idx_drug_symptoms_symptom_id ON drug_symptoms(symptom_id);
 
 -- ============================================================
+-- 4A. DISEASE_TYPES
+-- ============================================================
+CREATE TABLE disease_types (
+  id            UUID         DEFAULT gen_random_uuid() PRIMARY KEY,
+  code          VARCHAR(50)  NOT NULL UNIQUE,
+  name          VARCHAR(100) NOT NULL,
+  description   TEXT,
+  display_order INTEGER      NOT NULL DEFAULT 0,
+  created_at    TIMESTAMP    DEFAULT NOW()
+);
+
+CREATE INDEX idx_disease_types_code ON disease_types(code);
+
+-- ============================================================
+-- 4B. DISEASES
+-- ============================================================
+CREATE TABLE diseases (
+  id                     UUID         DEFAULT gen_random_uuid() PRIMARY KEY,
+  disease_type_id        UUID         NOT NULL REFERENCES disease_types(id) ON DELETE RESTRICT,
+  code                   VARCHAR(80)  NOT NULL UNIQUE,
+  canonical_name         VARCHAR(200) NOT NULL,
+  display_name           VARCHAR(200) NOT NULL,
+  icd10_code             VARCHAR(20),
+  description            TEXT,
+  synonyms_json          JSONB        NOT NULL DEFAULT '[]'::jsonb,
+  source_primary         VARCHAR(50)  NOT NULL,
+  source_provenance_json JSONB        NOT NULL DEFAULT '{}'::jsonb,
+  created_at             TIMESTAMP    DEFAULT NOW()
+);
+
+CREATE INDEX idx_diseases_code            ON diseases(code);
+CREATE INDEX idx_diseases_disease_type_id ON diseases(disease_type_id);
+CREATE INDEX idx_diseases_icd10_code      ON diseases(icd10_code);
+CREATE INDEX idx_diseases_display_name    ON diseases(display_name);
+
+-- ============================================================
+-- 4C. DISEASE_SYMPTOMS (junction N:N)
+-- ============================================================
+CREATE TABLE disease_symptoms (
+  id               UUID  DEFAULT gen_random_uuid() PRIMARY KEY,
+  disease_id       UUID  NOT NULL REFERENCES diseases(id)  ON DELETE CASCADE,
+  symptom_id       UUID  NOT NULL REFERENCES symptoms(id)  ON DELETE CASCADE,
+  confidence_score FLOAT CHECK (confidence_score >= 0 AND confidence_score <= 1),
+  evidence_note    TEXT,
+  created_at       TIMESTAMP DEFAULT NOW(),
+
+  CONSTRAINT uq_disease_symptom UNIQUE (disease_id, symptom_id)
+);
+
+CREATE INDEX idx_disease_symptoms_disease_id ON disease_symptoms(disease_id);
+CREATE INDEX idx_disease_symptoms_symptom_id ON disease_symptoms(symptom_id);
+
+-- ============================================================
+-- 4D. DISEASE_DRUGS (junction N:N)
+-- ============================================================
+CREATE TABLE disease_drugs (
+  id               UUID  DEFAULT gen_random_uuid() PRIMARY KEY,
+  disease_id       UUID  NOT NULL REFERENCES diseases(id) ON DELETE CASCADE,
+  drug_id          UUID  NOT NULL REFERENCES drugs(id)    ON DELETE CASCADE,
+  confidence_score FLOAT CHECK (confidence_score >= 0 AND confidence_score <= 1),
+  priority_rank    INTEGER NOT NULL DEFAULT 0,
+  evidence_note    TEXT,
+  created_at       TIMESTAMP DEFAULT NOW(),
+
+  CONSTRAINT uq_disease_drug UNIQUE (disease_id, drug_id)
+);
+
+CREATE INDEX idx_disease_drugs_disease_id ON disease_drugs(disease_id);
+CREATE INDEX idx_disease_drugs_drug_id    ON disease_drugs(drug_id);
+
+-- ============================================================
 -- 5. PATIENT_HISTORY
 -- ============================================================
 CREATE TABLE patient_history (

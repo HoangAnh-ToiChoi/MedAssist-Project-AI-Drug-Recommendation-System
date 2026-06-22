@@ -2,6 +2,19 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const Allergy = require('../src/entities/Allergy')
+const loggerModulePath = require.resolve('../src/utils/logger')
+
+require.cache[loggerModulePath] = {
+  id: loggerModulePath,
+  filename: loggerModulePath,
+  loaded: true,
+  exports: {
+    info() {},
+    warn() {},
+    error() {},
+  },
+}
+
 const RecommendationService = require('../src/services/RecommendationService')
 
 const createRedisFailureMock = () => ({
@@ -13,101 +26,113 @@ const createRedisFailureMock = () => ({
   },
 })
 
-test('checkSymptoms normalizes symptoms and survives redis failures', async () => {
-  const patientHistoryRepo = {
-    async findChronicDiseasesByUserId() {
-      return [{ getCondition: () => 'Hen suyá»…n' }]
+const createService = ({
+  history = [],
+  allergies = [],
+  resolveSymptomsWithinSpecialty,
+  findDiseaseGraphRecommendations,
+  saveId,
+}) =>
+  new RecommendationService(
+    {
+      async findChronicDiseasesByUserId() {
+        return history.map((condition) => ({ getCondition: () => condition }))
+      },
     },
-  }
-
-  const allergyRepo = {
-    async findAllByUserId() {
-      return ['Ibuprofen']
+    {
+      async findAllByUserId() {
+        return allergies
+      },
     },
-  }
-
-  const recommendationRepo = {
-    async save(recommendation) {
-      recommendation.id = 'rec-1'
-      return recommendation
+    {
+      async save(recommendation) {
+        recommendation.id = saveId
+        return recommendation
+      },
+      async resolveSymptomCodesWithinSpecialty(specialty, symptoms) {
+        return resolveSymptomsWithinSpecialty(specialty, symptoms)
+      },
+      async findDiseaseGraphRecommendations(specialty, symptomCodes) {
+        return findDiseaseGraphRecommendations(specialty, symptomCodes)
+      },
     },
-    async resolveSymptomCodes(symptoms) {
-      return symptoms.map((s) => {
-        const trimmed = String(s || '').trim()
-        if (trimmed === 'sá»‘t') return 'sot'
-        if (trimmed === 'Ä‘au Ä‘áº§u') return 'dau_dau'
-        return trimmed
-      })
-    },
-    async findRecommendedDrugsBySymptomCodes() {
-      return [
-        {
-          name: 'Paracetamol 500mg',
-          generic_name: 'Paracetamol',
-          confidence: 0.90,
-          category: 'Giáº£m Ä‘au - Háº¡ sá»‘t',
-          description: 'Thuá»‘c giáº£m Ä‘au háº¡ sá»‘t thÃ´ng thÆ°á»ng, an toÃ n cho háº§u háº¿t ngÆ°á»i dÃ¹ng.',
-          dosage: '500mg - 1g má»—i 4-6 giá», tá»‘i Ä‘a 4g/ngÃ y',
-          contraindications: 'Suy gan náº·ng, dá»‹ á»©ng Paracetamol',
-        },
-        {
-          name: 'Ibuprofen 400mg',
-          generic_name: 'Ibuprofen',
-          confidence: 0.72,
-          category: 'NSAIDs - KhÃ¡ng viÃªm',
-          description: 'Thuá»‘c khÃ¡ng viÃªm khÃ´ng steroid, háº¡ sá»‘t vÃ  giáº£m Ä‘au.',
-          dosage: '400mg má»—i 6-8 giá» sau Äƒn',
-          contraindications: 'LoÃ©t dáº¡ dÃ y, suy tháº­n náº·ng',
-        },
-      ]
-    },
-  }
-
-  const service = new RecommendationService(
-    patientHistoryRepo,
-    allergyRepo,
-    recommendationRepo,
     createRedisFailureMock()
   )
 
-  const result = await service.checkSymptoms('user-1', [' sá»‘t ', 'Ä‘au Ä‘áº§u', 'sá»‘t'])
+test('checkSymptoms scopes normalization to specialty and survives redis failures', async () => {
+  const service = createService({
+    history: ['Hen suyuen'],
+    allergies: ['Ibuprofen'],
+    saveId: 'rec-1',
+    resolveSymptomsWithinSpecialty: async (specialty, symptoms) => {
+      assert.equal(specialty, 'ho_hap')
+      return symptoms.map((item) => {
+        const trimmed = String(item || '').trim()
+        if (trimmed === 'sot') return 'sot'
+        if (trimmed === 'dau dau') return 'dau_dau'
+        return trimmed
+      })
+    },
+    findDiseaseGraphRecommendations: async (specialty, symptomCodes) => {
+      assert.equal(specialty, 'ho_hap')
+      assert.deepEqual(symptomCodes, ['dau_dau', 'sot'])
+      return {
+        matchedSymptoms: symptomCodes,
+        topDiseases: [{ id: 'disease-1', code: 'asthma', displayName: 'Hen phe quan', score: 0.92 }],
+        recommendations: [
+          {
+            name: 'Paracetamol 500mg',
+            generic_name: 'Paracetamol',
+            confidence: 0.9,
+            category: 'analgesic',
+            description: 'Safe pain reliever.',
+            dosage: '500mg',
+            contraindications: 'Suy gan nang',
+          },
+          {
+            name: 'Ibuprofen 400mg',
+            generic_name: 'Ibuprofen',
+            confidence: 0.72,
+            category: 'NSAIDs',
+            description: 'Anti-inflammatory.',
+            dosage: '400mg',
+            contraindications: 'Loet da day',
+          },
+        ],
+      }
+    },
+  })
 
-  assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Paracetamol'])
+  const result = await service.checkSymptoms('user-1', 'ho_hap', [' sot ', 'dau dau', 'sot'])
+
   assert.equal(result.id, 'rec-1')
-  assert.equal(result.engineVersion, 'db-fallback-v1')
+  assert.equal(result.specialty, 'ho_hap')
+  assert.deepEqual(result.matchedSymptoms, ['dau_dau', 'sot'])
+  assert.equal(result.topDiseases.length, 1)
+  assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Paracetamol'])
+  assert.equal(result.engineVersion, 'disease-graph-v1')
 })
 
-test('checkSymptoms filters out recommended drugs matching user patient history contraindications', async () => {
-  const patientHistoryRepo = {
-    async findChronicDiseasesByUserId() {
-      return [{ getCondition: () => 'Äau dáº¡ dÃ y' }]
-    },
-  }
-
-  const allergyRepo = {
-    async findAllByUserId() {
-      return []
-    },
-  }
-
-  const recommendationRepo = {
-    async save(recommendation) {
-      recommendation.id = 'rec-2'
-      return recommendation
-    },
-    async resolveSymptomCodes(symptoms) {
+test('checkSymptoms filters out recommendations contraindicated for patient history', async () => {
+  const service = createService({
+    history: ['Dau da day'],
+    saveId: 'rec-2',
+    resolveSymptomsWithinSpecialty: async (specialty, symptoms) => {
+      assert.equal(specialty, 'tieu_hoa')
       return symptoms
     },
-    async findRecommendedDrugsBySymptomCodes() {
-      return [
+    findDiseaseGraphRecommendations: async () => ({
+      matchedSymptoms: ['sot'],
+      topDiseases: [{ id: 'disease-2', code: 'gastritis', displayName: 'Viem da day', score: 0.8 }],
+      recommendations: [
         {
           name: 'Paracetamol 500mg',
           generic_name: 'Paracetamol',
-          confidence: 0.90,
+          confidence: 0.9,
           category: 'analgesic',
           description: 'Safe pain reliever.',
           dosage: '500mg',
-          contraindications: 'Suy gan náº·ng.',
+          contraindications: 'Suy gan nang',
         },
         {
           name: 'Ibuprofen 400mg',
@@ -116,53 +141,35 @@ test('checkSymptoms filters out recommended drugs matching user patient history 
           category: 'NSAIDs',
           description: 'Anti-inflammatory.',
           dosage: '400mg',
-          contraindications: 'KhÃ´ng dÃ¹ng khi loÃ©t dáº¡ dÃ y, suy tháº­n.',
+          contraindications: 'Khong dung khi loet da day, suy than.',
         },
-      ]
-    },
-  }
+      ],
+    }),
+  })
 
-  const service = new RecommendationService(
-    patientHistoryRepo,
-    allergyRepo,
-    recommendationRepo,
-    createRedisFailureMock()
-  )
+  const result = await service.checkSymptoms('user-1', 'tieu_hoa', ['sot'])
 
-  const result = await service.checkSymptoms('user-1', ['sot'])
-
-  assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Paracetamol'])
   assert.equal(result.id, 'rec-2')
+  assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Paracetamol'])
 })
 
-test('checkSymptoms filters drugs that share the same generic ingredient as a recorded allergy', async () => {
-  const patientHistoryRepo = {
-    async findChronicDiseasesByUserId() {
-      return []
-    },
-  }
-
-  const allergyRepo = {
-    async findAllByUserId() {
-      return [
-        new Allergy({
-          name: 'Panadol',
-          genericName: 'Paracetamol',
-        }),
-      ]
-    },
-  }
-
-  const recommendationRepo = {
-    async save(recommendation) {
-      recommendation.id = 'rec-3'
-      return recommendation
-    },
-    async resolveSymptomCodes(symptoms) {
+test('checkSymptoms filters drugs that match a recorded allergy ingredient', async () => {
+  const service = createService({
+    allergies: [
+      new Allergy({
+        name: 'Panadol',
+        genericName: 'Paracetamol',
+      }),
+    ],
+    saveId: 'rec-3',
+    resolveSymptomsWithinSpecialty: async (specialty, symptoms) => {
+      assert.equal(specialty, 'nhi_khoa')
       return symptoms
     },
-    async findRecommendedDrugsBySymptomCodes() {
-      return [
+    findDiseaseGraphRecommendations: async () => ({
+      matchedSymptoms: ['sot'],
+      topDiseases: [{ id: 'disease-3', code: 'flu', displayName: 'Cum', score: 0.88 }],
+      recommendations: [
         {
           name: 'Paracetamol Siro',
           generic_name: 'Paracetamol',
@@ -181,59 +188,45 @@ test('checkSymptoms filters drugs that share the same generic ingredient as a re
           dosage: '400mg',
           contraindications: '',
         },
-      ]
-    },
-  }
+      ],
+    }),
+  })
 
-  const service = new RecommendationService(
-    patientHistoryRepo,
-    allergyRepo,
-    recommendationRepo,
-    createRedisFailureMock()
-  )
+  const result = await service.checkSymptoms('user-1', 'nhi_khoa', ['sot'])
 
-  const result = await service.checkSymptoms('user-1', ['sot'])
-
-  assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Ibuprofen'])
   assert.equal(result.id, 'rec-3')
+  assert.deepEqual(result.recommendations.map((item) => item.generic_name), ['Ibuprofen'])
 })
 
-test('checkSymptoms throws a service-unavailable error when database fallback also fails', async () => {
-  process.env.AI_SERVICE_URL = ''
-
-  const patientHistoryRepo = {
-    async findChronicDiseasesByUserId() {
-      return []
-    },
-  }
-
-  const allergyRepo = {
-    async findAllByUserId() {
-      return []
-    },
-  }
-
-  const recommendationRepo = {
-    async save() {
-      throw new Error('should not save when recommendation generation fails')
-    },
-    async resolveSymptomCodes(symptoms) {
-      return symptoms
-    },
-    async findRecommendedDrugsBySymptomCodes() {
-      throw new Error('database unavailable')
-    },
-  }
-
-  const service = new RecommendationService(
-    patientHistoryRepo,
-    allergyRepo,
-    recommendationRepo,
-    createRedisFailureMock()
-  )
+test('checkSymptoms rejects requests without specialty', async () => {
+  const service = createService({
+    saveId: 'rec-missing-specialty',
+    resolveSymptomsWithinSpecialty: async () => [],
+    findDiseaseGraphRecommendations: async () => ({ matchedSymptoms: [], topDiseases: [], recommendations: [] }),
+  })
 
   await assert.rejects(
-    service.checkSymptoms('user-1', ['sot']),
+    service.checkSymptoms('user-1', '', ['sot']),
+    (error) => error.code === 'SPECIALTY_REQUIRED' && error.statusCode === 400
+  )
+})
+
+test('checkSymptoms throws service unavailable when disease-graph fallback fails', async () => {
+  process.env.AI_SERVICE_URL = ''
+
+  const service = createService({
+    saveId: 'rec-4',
+    resolveSymptomsWithinSpecialty: async (specialty, symptoms) => {
+      assert.equal(specialty, 'ho_hap')
+      return symptoms
+    },
+    findDiseaseGraphRecommendations: async () => {
+      throw new Error('database unavailable')
+    },
+  })
+
+  await assert.rejects(
+    service.checkSymptoms('user-1', 'ho_hap', ['sot']),
     (error) => error.code === 'RECOMMENDATION_UNAVAILABLE' && error.statusCode === 503
   )
 })

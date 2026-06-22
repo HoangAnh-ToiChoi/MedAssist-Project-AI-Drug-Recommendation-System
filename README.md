@@ -148,6 +148,30 @@ Response:
 File contract đầy đủ: `docs/api-contracts/be-ai-contract.md`  
 Postman collection: `docs/api-contracts/MedAssist.postman_collection.json` (HA cập nhật)
 
+## 🧭 Disease Graph v1
+
+- User phải chọn `specialty` trước khi duyệt hoặc gửi triệu chứng.
+- Backend recommendation đang chuyển sang flow `specialty -> disease -> symptom -> drug`.
+- Runtime không gọi API public về bệnh/thuốc; các nguồn như Clinical Tables, ICD-10, RxTerms, RxNorm, openFDA chỉ dùng cho seed/sync offline.
+- `drug_symptoms` vẫn có thể được giữ làm lớp compatibility/fallback, nhưng hướng chính là disease graph theo chuyên khoa.
+
+### Ghi chú tích hợp `ai-service`
+
+- Dữ liệu thuốc hiện tại vẫn nên xem là seed/demo, chưa phải bộ dữ liệu production-ready.
+- Với drug data thật, cần tiếp tục fetch và hợp nhất từ nhiều nguồn công khai thay vì phụ thuộc vào một nguồn đơn lẻ.
+- Ưu tiên thực tế nên là `openFDA` cho dữ liệu cấu trúc, `Wikipedia` làm fallback tham khảo, rồi mở rộng thêm `DrugBank`, `DAV`, `CTDbase` và các nguồn công khai phù hợp thị trường Việt Nam.
+- Trước khi đẩy vào các bảng như `drugs` hoặc `drug_symptoms`, nên có bước normalize schema, deduplicate theo hoạt chất/tên thương mại và review thủ công các record nhạy cảm.
+- `backend` hiện dùng contract nội bộ `POST /ai/recommend` cho luồng gợi ý thuốc.
+- Source Python mới trong `ai-service/` hiện đang cung cấp chatbot endpoint `POST /ai/chat` để thử nghiệm fallback giữa nhiều LLM provider.
+- Vì vậy, thư mục `ai-service/` hiện **chưa tự động thay thế** engine recommendation mà backend đang dùng. Muốn tích hợp đầy đủ cần thêm lớp mapping/adapter giữa `backend/src/services/ai/HttpAiServiceEngine.js` và API thực tế của FastAPI.
+- Test trong `ai-service/tests/test_chatbot.py` là mock/integration nhẹ và chạy được trong suite mặc định khi đã cài `pytest-asyncio`.
+- File `ai-service/tests/test_real_chatbot.py` là **live test**, mặc định bị skip để tránh phụ thuộc network/API key. Chỉ chạy khi chủ động bật:
+
+```bash
+cd ai-service
+RUN_LIVE_AI_TESTS=1 pytest -q
+```
+
 ---
 
 ## 📅 Timeline 4 Sprint

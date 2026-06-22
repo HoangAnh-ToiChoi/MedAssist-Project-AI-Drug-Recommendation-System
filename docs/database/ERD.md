@@ -74,7 +74,7 @@ Thiết kế tuân theo **Dạng chuẩn thứ ba (3NF)**:
 
 ## 2. Sơ đồ ERD
 
-Sơ đồ dưới đây thể hiện toàn bộ 9 bảng, các cột chính, và mối quan hệ khóa ngoại giữa chúng.
+Sơ đồ dưới đây thể hiện các bảng chính, các cột chính, và mối quan hệ khóa ngoại giữa chúng.
 
 ```mermaid
 erDiagram
@@ -134,6 +134,48 @@ erDiagram
         TIMESTAMPTZ created_at
     }
 
+    disease_types {
+        UUID id PK
+        VARCHAR code
+        VARCHAR name
+        TEXT description
+        INTEGER display_order
+        TIMESTAMPTZ created_at
+    }
+
+    diseases {
+        UUID id PK
+        UUID disease_type_id FK
+        VARCHAR code
+        VARCHAR canonical_name
+        VARCHAR display_name
+        VARCHAR icd10_code
+        TEXT description
+        JSONB synonyms_json
+        VARCHAR source_primary
+        JSONB source_provenance_json
+        TIMESTAMPTZ created_at
+    }
+
+    disease_symptoms {
+        UUID id PK
+        UUID disease_id FK
+        UUID symptom_id FK
+        FLOAT confidence_score
+        TEXT evidence_note
+        TIMESTAMPTZ created_at
+    }
+
+    disease_drugs {
+        UUID id PK
+        UUID disease_id FK
+        UUID drug_id FK
+        FLOAT confidence_score
+        INTEGER priority_rank
+        TEXT evidence_note
+        TIMESTAMPTZ created_at
+    }
+
     drug_symptoms {
         UUID drug_id FK
         UUID symptom_id FK
@@ -175,6 +217,11 @@ erDiagram
     users ||--o{ recommendations : "nhận"
     drugs ||--o{ drug_symptoms : "có"
     symptoms ||--o{ drug_symptoms : "có"
+    disease_types ||--o{ diseases : "phân loại"
+    diseases ||--o{ disease_symptoms : "có"
+    symptoms ||--o{ disease_symptoms : "liên quan"
+    diseases ||--o{ disease_drugs : "điều trị bằng"
+    drugs ||--o{ disease_drugs : "áp dụng cho"
 ```
 
 > **Ghi chú:** Bảng `otp_codes` không có khóa ngoại tới `users` — thiết kế có chủ ý vì OTP được gửi tới email trước khi tài khoản được xác minh, nên không thể ràng buộc FK.
@@ -469,6 +516,98 @@ is_primary: false
 
 ---
 
+### 3.6A Bảng `disease_types`
+
+**Mục đích:** Danh mục chuyên khoa/nhóm bệnh cấp cao. Đây là điểm vào chính cho luồng chọn bệnh theo chuyên khoa trước khi đi xuống danh sách bệnh cụ thể.
+
+**DDL:**
+
+```sql
+CREATE TABLE disease_types (
+    id            UUID         DEFAULT gen_random_uuid() PRIMARY KEY,
+    code          VARCHAR(50)  NOT NULL UNIQUE,
+    name          VARCHAR(100) NOT NULL,
+    description   TEXT,
+    display_order INTEGER      NOT NULL DEFAULT 0,
+    created_at    TIMESTAMP    DEFAULT NOW()
+);
+```
+
+**Quan hệ chính:** Một `disease_type` có nhiều `diseases` (1:N).
+
+---
+
+### 3.6B Bảng `diseases`
+
+**Mục đích:** Danh mục bệnh cụ thể thuộc từng chuyên khoa. Bảng này là trung tâm của disease graph, kết nối bệnh với triệu chứng và thuốc.
+
+**DDL:**
+
+```sql
+CREATE TABLE diseases (
+    id                     UUID         DEFAULT gen_random_uuid() PRIMARY KEY,
+    disease_type_id        UUID         NOT NULL REFERENCES disease_types(id) ON DELETE RESTRICT,
+    code                   VARCHAR(80)  NOT NULL UNIQUE,
+    canonical_name         VARCHAR(200) NOT NULL,
+    display_name           VARCHAR(200) NOT NULL,
+    icd10_code             VARCHAR(20),
+    description            TEXT,
+    synonyms_json          JSONB        NOT NULL DEFAULT '[]'::jsonb,
+    source_primary         VARCHAR(50)  NOT NULL,
+    source_provenance_json JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    created_at             TIMESTAMP    DEFAULT NOW()
+);
+```
+
+**Quan hệ chính:** Một `disease` thuộc một `disease_type`, có nhiều `symptoms` qua `disease_symptoms`, và có nhiều `drugs` qua `disease_drugs`.
+
+---
+
+### 3.6C Bảng `disease_symptoms`
+
+**Mục đích:** Bảng trung gian nhiều-nhiều giữa bệnh và triệu chứng. Dùng để suy luận các bệnh phù hợp từ cụm triệu chứng người dùng nhập.
+
+**DDL:**
+
+```sql
+CREATE TABLE disease_symptoms (
+    id               UUID  DEFAULT gen_random_uuid() PRIMARY KEY,
+    disease_id       UUID  NOT NULL REFERENCES diseases(id) ON DELETE CASCADE,
+    symptom_id       UUID  NOT NULL REFERENCES symptoms(id) ON DELETE CASCADE,
+    confidence_score FLOAT CHECK (confidence_score >= 0 AND confidence_score <= 1),
+    evidence_note    TEXT,
+    created_at       TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT uq_disease_symptom UNIQUE (disease_id, symptom_id)
+);
+```
+
+**Quan hệ chính:** `diseases` N:N `symptoms` qua `disease_symptoms`.
+
+---
+
+### 3.6D Bảng `disease_drugs`
+
+**Mục đích:** Bảng trung gian nhiều-nhiều giữa bệnh và thuốc. Dùng để gợi ý thuốc theo bệnh đã xác định hoặc bệnh có xác suất phù hợp cao.
+
+**DDL:**
+
+```sql
+CREATE TABLE disease_drugs (
+    id               UUID  DEFAULT gen_random_uuid() PRIMARY KEY,
+    disease_id       UUID  NOT NULL REFERENCES diseases(id) ON DELETE CASCADE,
+    drug_id          UUID  NOT NULL REFERENCES drugs(id) ON DELETE CASCADE,
+    confidence_score FLOAT CHECK (confidence_score >= 0 AND confidence_score <= 1),
+    priority_rank    INTEGER NOT NULL DEFAULT 0,
+    evidence_note    TEXT,
+    created_at       TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT uq_disease_drug UNIQUE (disease_id, drug_id)
+);
+```
+
+**Quan hệ chính:** `diseases` N:N `drugs` qua `disease_drugs`.
+
+---
+
 ### 3.7 Bảng `patient_history`
 
 **Mục đích:** Lưu tiền sử bệnh cá nhân hóa của từng người dùng. AI Engine sử dụng dữ liệu này để lọc và điều chỉnh kết quả gợi ý phù hợp với tình trạng sức khỏe hiện tại.
@@ -595,6 +734,13 @@ CREATE TABLE recommendations (
 | `users` | `patient_history` | 1 : N | Một user có nhiều mục tiền sử bệnh | CASCADE |
 | `users` | `allergies` | 1 : N | Một user có nhiều dị ứng | CASCADE |
 | `users` | `recommendations` | 1 : N | Một user có nhiều lịch sử gợi ý | CASCADE |
+| `disease_types` | `diseases` | 1 : N | Một chuyên khoa có nhiều bệnh | RESTRICT |
+| `diseases` | `disease_symptoms` | 1 : N | Một bệnh có nhiều triệu chứng liên quan | CASCADE |
+| `symptoms` | `disease_symptoms` | 1 : N | Một triệu chứng có thể xuất hiện trong nhiều bệnh | CASCADE |
+| `diseases` + `symptoms` | `disease_symptoms` | N : N | Nhiều bệnh ↔ nhiều triệu chứng (qua bảng trung gian) | — |
+| `diseases` | `disease_drugs` | 1 : N | Một bệnh có nhiều thuốc phù hợp | CASCADE |
+| `drugs` | `disease_drugs` | 1 : N | Một thuốc có thể phù hợp với nhiều bệnh | CASCADE |
+| `diseases` + `drugs` | `disease_drugs` | N : N | Nhiều bệnh ↔ nhiều thuốc (qua bảng trung gian) | — |
 | `drugs` | `drug_symptoms` | 1 : N | Một thuốc ánh xạ nhiều triệu chứng | CASCADE |
 | `symptoms` | `drug_symptoms` | 1 : N | Một triệu chứng ánh xạ nhiều thuốc | CASCADE |
 | `drugs` + `symptoms` | `drug_symptoms` | N : N | Nhiều thuốc ↔ nhiều triệu chứng (qua bảng trung gian) | — |
@@ -605,7 +751,16 @@ CREATE TABLE recommendations (
 Một tài khoản có thể đăng nhập từ nhiều thiết bị (điện thoại, laptop, tablet) đồng thời, mỗi phiên sinh ra một refresh token độc lập. Thiết kế này hỗ trợ **Refresh Token Rotation**: khi refresh, token cũ bị thu hồi (`revoked = true`) và token mới được phát hành, ngăn chặn tấn công token replay.
 
 **`drugs` ↔ `symptoms` qua `drug_symptoms` (N:N):**  
-Quan hệ nhiều-nhiều điển hình. Một thuốc như Paracetamol có thể điều trị nhiều triệu chứng (sốt, đau đầu, đau nhức). Một triệu chứng như sốt có thể được điều trị bằng nhiều thuốc khác nhau. Bảng `drug_symptoms` đóng vai trò **bảng trung gian (junction table)** với thuộc tính bổ sung là `weight` — điểm quan trọng nhất trong thiết kế AI Engine.
+Quan hệ nhiều-nhiều điển hình. Một thuốc như Paracetamol có thể điều trị nhiều triệu chứng (sốt, đau đầu, đau nhức). Một triệu chứng như sốt có thể được điều trị bằng nhiều thuốc khác nhau. Bảng `drug_symptoms` đóng vai trò **bảng trung gian (junction table)** với thuộc tính bổ sung là `weight`. Trong mô hình specialty-first mới, bảng này vẫn được giữ làm lớp compatibility/fallback khi chưa xác định được bệnh cụ thể hoặc khi cần gợi ý trực tiếp từ triệu chứng.
+
+**`disease_types` → `diseases` (1:N):**  
+Mỗi chuyên khoa như Tim mạch, Nội tiết, Hô hấp có thể chứa nhiều bệnh cụ thể. Quan hệ này hỗ trợ luồng điều hướng specialty-first: chọn chuyên khoa trước, sau đó lọc xuống danh sách bệnh.
+
+**`diseases` ↔ `symptoms` qua `disease_symptoms` (N:N):**  
+Một bệnh thường có nhiều triệu chứng, và một triệu chứng có thể xuất hiện ở nhiều bệnh khác nhau. Bảng `disease_symptoms` giúp AI Engine suy luận bệnh từ cụm triệu chứng đầu vào.
+
+**`diseases` ↔ `drugs` qua `disease_drugs` (N:N):**  
+Một bệnh có thể có nhiều thuốc phù hợp, và một thuốc có thể dùng trong nhiều bệnh. Bảng `disease_drugs` là đường gợi ý chính khi hệ thống đã xác định hoặc xếp hạng được bệnh liên quan.
 
 **`otp_codes` (độc lập):**  
 Không có FK tới `users`. OTP được tạo trước khi user hoàn tất đăng ký (khi xác minh email lần đầu) hoặc khi quên mật khẩu. Việc thêm FK sẽ tạo vòng tròn phụ thuộc logic. Thay vào đó, Backend tra cứu theo `email` và `used = false` và `expires_at > now()`.

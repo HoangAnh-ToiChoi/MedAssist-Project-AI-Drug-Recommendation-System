@@ -2,12 +2,43 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import RecommendationCard from '../components/symptoms/RecommendationCard';
+import DiseaseCandidateCard from '../components/symptoms/DiseaseCandidateCard';
 import MedicalAlert from '../components/common/MedicalAlert';
 import EmptyState from '../components/common/EmptyState';
 import PageHeader from '../components/common/PageHeader';
 
+const SPECIALTY_LABELS = {
+  tim_mach: 'Tim mạch',
+  da_lieu: 'Da liễu',
+  noi_tiet: 'Nội tiết',
+  tieu_hoa: 'Tiêu hóa',
+  huyet_hoc: 'Huyết học',
+  benh_truyen_nhiem: 'Bệnh truyền nhiễm',
+  than: 'Than',
+  than_kinh: 'Thần kinh',
+  ung_buou: 'Ung bướu',
+  nhan_khoa: 'Nhãn khoa',
+  chinh_hinh: 'Chỉnh hình',
+  tai_mui_hong: 'Tai Mũi Họng',
+  tam_than: 'Tâm thần',
+  ho_hap: 'Hô hấp',
+  thap_khop: 'Thấp khớp',
+  tiet_nieu: 'Tiết niệu',
+  cap_cuu: 'Cấp cứu',
+  gia_dinh: 'Gia đình',
+  noi_khoa: 'Nội khoa',
+  nhi_khoa: 'Nhi khoa',
+  san_phu_khoa: 'Sản phụ khoa',
+  chan_doan_hinh_anh: 'Chẩn đoán hình ảnh',
+  gay_me: 'Gây mê',
+  giai_phau_benh: 'Giải phẫu bệnh',
+};
+
 const DrugSuggestion = () => {
   const [recommendations, setRecommendations] = useState([]);
+  const [topDiseases, setTopDiseases] = useState([]);
+  const [matchedSymptoms, setMatchedSymptoms] = useState([]);
+  const [dangerAlert, setDangerAlert] = useState('');
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -21,6 +52,9 @@ const DrugSuggestion = () => {
         // Handle both raw array and wrapper object structures
         const drugs = data.recommendations || (Array.isArray(data) ? data : []);
         setRecommendations(drugs);
+        setTopDiseases(data.topDiseases || data.top_diseases || []);
+        setMatchedSymptoms(data.matchedSymptoms || data.matched_symptoms || []);
+        setDangerAlert(data.dangerAlert || data.danger_alert || '');
         setMeta(data.meta || null);
       } catch (err) {
         console.error('Lỗi khi parse kết quả gợi ý:', err);
@@ -30,10 +64,12 @@ const DrugSuggestion = () => {
   }, []);
 
   // Helper check for critical warning symptoms
-  const hasDangerousSymptom = meta?.symptoms?.some((s) => {
+  const symptomSignals = matchedSymptoms.length > 0 ? matchedSymptoms : (meta?.symptoms || []);
+  const hasDangerousSymptom = symptomSignals.some((s) => {
     const name = s.toLowerCase();
     return name.includes('khó thở') || name.includes('đau ngực') || name.includes('sốt cao') || name.includes('ngất');
   }) || false;
+  const specialtyLabel = SPECIALTY_LABELS[meta?.specialty] || meta?.specialty || 'Chưa chọn';
 
   return (
     <div className="relative min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col font-sans">
@@ -63,10 +99,20 @@ const DrugSuggestion = () => {
         {meta && (
           <div className="glass-card p-4 rounded-xl border-white/5 space-y-2">
             <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Thông số hồ sơ phân tích</h4>
-            <div className="grid gap-2 sm:grid-cols-3 text-xs">
+            <div className="grid gap-2 sm:grid-cols-4 text-xs">
+              <div>
+                <span className="text-slate-400 block font-medium">Chuyên khoa:</span>
+                <span className="text-slate-200 font-semibold">{specialtyLabel}</span>
+              </div>
               <div>
                 <span className="text-slate-400 block font-medium">Triệu chứng:</span>
                 <span className="text-slate-200 font-semibold">{meta.symptoms?.join(', ') || 'Chưa rõ'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-medium">Triệu chứng khớp:</span>
+                <span className="text-slate-200 font-semibold">
+                  {matchedSymptoms.length > 0 ? matchedSymptoms.join(', ') : 'Chưa đối chiếu'}
+                </span>
               </div>
               <div>
                 <span className="text-slate-400 block font-medium">Đã đối chiếu dị ứng:</span>
@@ -84,10 +130,32 @@ const DrugSuggestion = () => {
           </div>
         )}
 
+        {topDiseases.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">Benh nghi ngo hang dau</h3>
+                <p className="text-xs text-slate-400">
+                  Hệ thống ưu tiên disease graph trong phạm vi chuyên khoa đã chọn.
+                </p>
+              </div>
+              <span className="rounded-full border border-slate-800 bg-slate-950/40 px-3 py-1 text-[11px] font-semibold text-slate-300">
+                {topDiseases.length} bệnh cân nhắc
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {topDiseases.map((disease, index) => (
+                <DiseaseCandidateCard key={disease.id || disease.code || index} disease={disease} />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Warning Alerts */}
-        {hasDangerousSymptom && (
+        {(dangerAlert || hasDangerousSymptom) && (
           <MedicalAlert type="danger" title="Cảnh báo triệu chứng nguy hiểm">
-            Bạn đang có triệu chứng nghiêm trọng (khó thở, đau ngực, sốt cao...). Trợ lý AI khuyên bạn nên thăm khám bác sĩ hoặc liên hệ cơ sở y tế khẩn cấp ngay lập tức, không nên tự điều trị tại nhà.
+            {dangerAlert || 'Bạn đang có triệu chứng nghiêm trọng (khó thở, đau ngực, sốt cao...). Trợ lý AI khuyên bạn nên thăm khám bác sĩ hoặc liên hệ cơ sở y tế khẩn cấp ngay lập tức, không nên tự điều trị tại nhà.'}
           </MedicalAlert>
         )}
 

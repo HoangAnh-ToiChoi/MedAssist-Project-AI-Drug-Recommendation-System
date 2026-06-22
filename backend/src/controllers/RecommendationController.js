@@ -11,6 +11,7 @@ class RecommendationController {
     try {
       const result = await this.#recommendationService.checkSymptoms(
         req.user.id,
+        req.body.specialty,
         req.body.symptoms,
       )
       res.json(ApiResponse.success(result, 'Gợi ý thuốc thành công'))

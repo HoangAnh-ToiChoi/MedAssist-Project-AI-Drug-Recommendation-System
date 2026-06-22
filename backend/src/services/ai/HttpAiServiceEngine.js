@@ -11,7 +11,7 @@ class HttpAiServiceEngine extends AIProvider {
     this.#timeout = timeout
   }
 
-  async getRecommendations(symptoms, history, allergies) {
+  async getRecommendations(specialty, symptoms, history, allergies) {
     if (!this.#url) {
       throw new Error('AI service URL is not configured')
     }
@@ -19,6 +19,7 @@ class HttpAiServiceEngine extends AIProvider {
     const { data } = await axios.post(
       `${this.#url}/ai/recommend`,
       {
+        specialty,
         symptoms,
         history,
         allergies,
@@ -29,8 +30,10 @@ class HttpAiServiceEngine extends AIProvider {
     )
 
     return {
-      engineVersion: data.engine_version || 'ai-service-v1',
+      engineVersion: data.engine_version || 'ai-service-v2',
       recommendations: data.recommendations || [],
+      topDiseases: data.top_diseases || [],
+      matchedSymptoms: data.matched_symptoms || [],
       dangerAlert: data.danger_alert || null,
     }
   }

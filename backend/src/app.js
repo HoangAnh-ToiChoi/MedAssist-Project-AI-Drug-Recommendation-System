@@ -3,6 +3,7 @@ const cors = require('cors')
 const errorHandler = require('./middlewares/errorHandler')
 const authRoutes = require('./routes/authRoutes')
 const symptomRoutes = require('./routes/symptomRoutes')
+const specialtyRoutes = require('./routes/specialtyRoutes')
 const historyRoutes = require('./routes/historyRoutes')
 const allergyRoutes = require('./routes/allergyRoutes')
 
@@ -43,6 +44,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }))
 
 app.use('/api/v1/auth', authRoutes)
 app.use('/api/v1/symptoms', symptomRoutes)
+app.use('/api/v1/specialties', specialtyRoutes)
 app.use('/api/v1/history', historyRoutes)
 app.use('/api/v1/allergies', allergyRoutes)
 

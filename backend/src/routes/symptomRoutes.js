@@ -12,6 +12,12 @@ const recommendationController = container.resolve('recommendationController')
 
 // ── Validation schema ────────────────────────────────────────────────────────
 const checkSchema = Joi.object({
+  specialty: Joi.string().trim().min(1).required().messages({
+    'string.base': 'specialty phải là chuỗi',
+    'string.empty': 'Chuyên khoa là bắt buộc',
+    'string.min': 'Chuyên khoa là bắt buộc',
+    'any.required': 'Chuyên khoa là bắt buộc',
+  }),
   symptoms: Joi.array().items(
     Joi.string().trim().min(1).messages({
       'string.min':   'Triệu chứng không được để trống',

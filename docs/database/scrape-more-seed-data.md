@@ -9,7 +9,7 @@ npm run scrape:more
 Or run directly:
 
 ```bash
-node scripts/scrape-more-medical-data.js --min-drugs=240 --min-symptoms=240 --min-mappings=500
+node scripts/scrape-more-medical-data.js --min-drugs=240 --min-symptoms=240 --min-mappings=500 --drug-enrich-limit=80
 ```
 
 Default output:
@@ -18,10 +18,14 @@ Default output:
 data/crawled/more/symptoms_scraped.csv
 data/crawled/more/drugs_scraped.csv
 data/crawled/more/drug_symptom_mappings_review.csv
+data/crawled/more/drug_sources_review.csv
+data/crawled/more/drugs_enriched.json
 data/crawled/more/cleanup_previous_scrape.sql
 data/crawled/more/scrape_import.sql
 data/crawled/more/scrape_report.json
 ```
+
+`--drug-enrich-limit` giới hạn số lượng drug record sẽ được gọi network enrichment trực tiếp trong mỗi lần chạy. Phần còn lại vẫn được sinh review links/provenance để curate thủ công mà không làm script chạy quá lâu.
 
 ## Important: do not import the mapping CSV into `drug_symptoms`
 
@@ -62,4 +66,41 @@ The generated SQL uses `ON CONFLICT` for symptoms and mappings, so it is safe to
 
 `symptoms_scraped.csv` contains only newly scraped symptoms and excludes the original Vietnamese seed rows. Direct CSV import is still intended for a one-time import only; use `scrape_import.sql` for repeatable imports.
 
-Symptoms use the curated Vietnamese seed plus EBI OLS. Drugs use openFDA active ingredients as the main source. Wikipedia drug categories are fallback-only because those categories also contain research compounds, drug classes, and non-product pages. DrugBank, DAV, and CTDbase are checked best-effort and recorded in `scrape_report.json`.
+Symptoms use the curated Vietnamese seed plus EBI OLS. Drugs use openFDA active ingredients as the main source. `openFDA label` is used as the first enrichment pass for indication/contraindication text when available. Wikipedia is still fallback for drug descriptions. DrugBank, DAV, and CTDbase are currently surfaced through generated lookup URLs in `drug_sources_review.csv` / `drugs_enriched.json` so the team can review and curate records even when those public sites throttle or block automated scraping.
+
+## Next step for real drug data
+
+- Bộ dữ liệu thuốc hiện tại mới phù hợp cho seed/demo và kiểm thử tích hợp, chưa đủ độ phủ để xem là production-ready.
+- Drug data thật cần tiếp tục được fetch từ nhiều nguồn công khai rồi hợp nhất lại, không nên phụ thuộc vào một nguồn duy nhất.
+- Hướng ưu tiên hiện tại là giữ `openFDA` làm nguồn cấu trúc chính khi match được hoạt chất hoặc sản phẩm, dùng `Wikipedia` làm fallback, rồi mở rộng thêm `DrugBank`, `DAV`, `CTDbase` và các nguồn công khai phù hợp với thị trường Việt Nam.
+- Trước khi promote vào seed mặc định hoặc DB dùng thật, nên có pipeline chuẩn hóa field giữa các nguồn, gộp bản ghi trùng theo hoạt chất/brand name/synonym, gắn provenance theo từng field quan trọng và review thủ công các record có chống chỉ định, cảnh báo hoặc mapping triệu chứng chưa chắc chắn.
+
+## Disease graph seed
+
+Script:
+
+```bash
+npm run seed:disease-graph
+```
+
+Small verification run:
+
+```bash
+npm run seed:disease-graph -- --min-diseases=5 --min-drugs=5 --output-dir=/tmp/medassist-disease-graph-check
+```
+
+Default output:
+
+```text
+data/crawled/disease-graph/disease_types.csv
+data/crawled/disease-graph/diseases_review.csv
+data/crawled/disease-graph/drugs_review.csv
+data/crawled/disease-graph/disease_symptoms_review.csv
+data/crawled/disease-graph/disease_drugs_review.csv
+data/crawled/disease-graph/import.sql
+data/crawled/disease-graph/scrape_report.json
+```
+
+`disease_types.csv` and `import.sql` seed the approved 24 specialty taxonomy. The disease, drug, disease-symptom, and disease-drug CSV files are review artifacts: curate them, resolve UUIDs against `disease_types`, `symptoms`, and `drugs`, then import only approved rows.
+
+The script makes best-effort offline seed/sync calls to public sources such as Clinical Tables, RxTerms, RxNorm, and openFDA, then falls back to deterministic review candidates when network access is unavailable. These public APIs must not be used as runtime dependencies for user-facing medical recommendations.

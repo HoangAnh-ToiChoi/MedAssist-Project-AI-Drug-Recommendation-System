@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import Button from '../components/common/Button';
+import SpecialtySelector from '../components/symptoms/SpecialtySelector';
 import SymptomSelector from '../components/symptoms/SymptomSelector';
 import SelectedSymptoms from '../components/symptoms/SelectedSymptoms';
 import MedicalAlert from '../components/common/MedicalAlert';
 import api from '../services/api';
 
 const SymptomInput = () => {
+  const [specialty, setSpecialty] = useState('');
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
   const [severity, setSeverity] = useState('medium'); // mild, medium, severe
   const [duration, setDuration] = useState('today'); // today, 2-3days, over1week
@@ -40,15 +42,28 @@ const SymptomInput = () => {
 
   const handleAdd = (symptom) => {
     if (!selectedSymptoms.includes(symptom)) {
+      setError('');
       setSelectedSymptoms([...selectedSymptoms, symptom]);
     }
   };
 
   const handleRemove = (symptom) => {
+    setError('');
     setSelectedSymptoms(selectedSymptoms.filter(s => s !== symptom));
   };
 
+  const handleSpecialtyChange = (nextSpecialty) => {
+    setError('');
+    setSpecialty(nextSpecialty);
+    setSelectedSymptoms([]);
+  };
+
   const handleSubmit = async () => {
+    if (!specialty) {
+      setError('Vui lòng chọn chuyên khoa trước khi tiếp tục');
+      return;
+    }
+
     if (selectedSymptoms.length === 0) {
       setError('Vui lòng chọn ít nhất một triệu chứng');
       return;
@@ -57,8 +72,8 @@ const SymptomInput = () => {
     setError('');
     try {
       const response = await api.post('/symptoms/check', { 
+        specialty,
         symptoms: selectedSymptoms,
-        // Optional parameters passed to back-end if needed
         severity,
         duration
       });
@@ -67,6 +82,7 @@ const SymptomInput = () => {
       localStorage.setItem('drugSuggestions', JSON.stringify({
         ...(response.data.data || response.data),
         meta: {
+          specialty,
           symptoms: selectedSymptoms,
           severity,
           duration,
@@ -123,8 +139,14 @@ const SymptomInput = () => {
             </div>
           )}
 
+          <SpecialtySelector
+            specialty={specialty}
+            onChange={handleSpecialtyChange}
+          />
+
           {/* Dynamic Symptom Selector component */}
           <SymptomSelector
+            specialty={specialty}
             selected={selectedSymptoms}
             onAdd={handleAdd}
             onRemove={handleRemove}
@@ -195,15 +217,15 @@ const SymptomInput = () => {
               variant="primary"
               size="lg"
               onClick={handleSubmit}
-              disabled={selectedSymptoms.length === 0 || loading}
+              disabled={!specialty || selectedSymptoms.length === 0 || loading}
               className="btn-gradient w-full py-4 rounded-xl font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed"
               loading={loading}
             >
               {loading ? 'Đang phân tích dữ liệu...' : 'Xem gợi ý thuốc tham khảo'}
             </Button>
-            {selectedSymptoms.length === 0 && (
+            {(!specialty || selectedSymptoms.length === 0) && (
               <p className="text-center text-[11px] text-slate-500 mt-2">
-                Chọn ít nhất 1 triệu chứng để tiếp tục
+                {!specialty ? 'Chọn chuyên khoa trước khi duyệt triệu chứng' : 'Chọn ít nhất 1 triệu chứng để tiếp tục'}
               </p>
             )}
           </div>

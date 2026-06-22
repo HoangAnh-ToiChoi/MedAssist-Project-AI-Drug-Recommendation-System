@@ -9,12 +9,29 @@ class DatabaseFallbackEngine extends AIProvider {
     this.#recommendationRepo = recommendationRepo
   }
 
-  async getRecommendations(symptoms, history, allergies) {
+  async getRecommendations(specialty, symptoms, history, allergies) {
+    if (typeof this.#recommendationRepo.findDiseaseGraphRecommendations === 'function') {
+      const graphResult = await this.#recommendationRepo.findDiseaseGraphRecommendations(
+        specialty,
+        symptoms
+      )
+
+      return {
+        engineVersion: 'disease-graph-v1',
+        dangerAlert: this.#detectDanger(symptoms),
+        recommendations: graphResult.recommendations || [],
+        topDiseases: graphResult.topDiseases || [],
+        matchedSymptoms: graphResult.matchedSymptoms || symptoms,
+      }
+    }
+
     const recommendations = await this.#recommendationRepo.findRecommendedDrugsBySymptomCodes(symptoms)
     return {
       engineVersion: 'db-fallback-v1',
       dangerAlert: this.#detectDanger(symptoms),
       recommendations,
+      topDiseases: [],
+      matchedSymptoms: symptoms,
     }
   }
 
