@@ -28,9 +28,46 @@ class UserRepository {
 
   async findById(userId) {
     return this.#findOneBy(
-      'SELECT * FROM users WHERE id = $1 AND is_active = true',
+      'SELECT id, email, full_name, date_of_birth, gender, phone_number, role, is_active, created_at, updated_at FROM users WHERE id = $1 AND is_active = true',
       [userId]
     )
+  }
+
+  async updateProfile(id, profileData) {
+    const updates = []
+    const values = [id]
+
+    if (profileData.fullName !== undefined) {
+      values.push(profileData.fullName)
+      updates.push(`full_name = $${values.length}`)
+    }
+    if (profileData.dateOfBirth !== undefined) {
+      values.push(profileData.dateOfBirth)
+      updates.push(`date_of_birth = $${values.length}`)
+    }
+    if (profileData.gender !== undefined) {
+      const dbGender = profileData.gender ? profileData.gender.toLowerCase() : null
+      values.push(dbGender)
+      updates.push(`gender = $${values.length}`)
+    }
+    if (profileData.phoneNumber !== undefined) {
+      values.push(profileData.phoneNumber)
+      updates.push(`phone_number = $${values.length}`)
+    }
+
+    if (!updates.length) {
+      return this.findById(id)
+    }
+
+    const { rows } = await this.#pool.query(
+      `UPDATE users
+       SET ${updates.join(', ')}, updated_at = NOW()
+       WHERE id = $1 AND is_active = true
+       RETURNING id, email, full_name, date_of_birth, gender, phone_number, role, is_active, created_at, updated_at`,
+      values
+    )
+
+    return User.fromRow(rows[0])
   }
 
   async save(user) {
