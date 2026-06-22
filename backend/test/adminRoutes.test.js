@@ -26,6 +26,22 @@ const mockPool = {
       return { rows: mockState.users }
     }
 
+    // Mock query for findByIdIncludingInactive — used by updateUserStatus service
+    if (sql.includes('SELECT id, email, role, is_active FROM users WHERE id = $1')) {
+      const [id] = params
+      const user = mockState.users.find(u => u.id === id)
+      return { rows: user ? [{ id: user.id, email: user.email, role: user.role, is_active: user.is_active }] : [] }
+    }
+
+    // Mock query for updateStatus — used by updateUserStatus service
+    if (sql.includes('UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, is_active')) {
+      const [isActive, id] = params
+      const user = mockState.users.find(u => u.id === id)
+      if (!user) return { rows: [] }
+      user.is_active = isActive
+      return { rows: [{ id: user.id, email: user.email, is_active: user.is_active }] }
+    }
+
     throw new Error(`Unexpected SQL in adminRoutes.test: ${sql}`)
   }
 }
@@ -82,10 +98,14 @@ after(async () => {
   })
 })
 
+// Fixed UUIDv4 values used across all tests
+const ADMIN_UUID = 'a1a1a1a1-a1a1-4a1a-a1a1-a1a1a1a1a1a1'
+const USER_UUID  = 'b2b2b2b2-b2b2-4b2b-b2b2-b2b2b2b2b2b2'
+
 beforeEach(() => {
   mockState.users = [
     {
-      id: 'admin-1',
+      id: ADMIN_UUID,
       email: 'admin@example.com',
       password_hash: '$2a$10$abcdef',
       full_name: 'Admin User',
@@ -98,7 +118,7 @@ beforeEach(() => {
       updated_at: '2026-06-17T10:00:00.000Z'
     },
     {
-      id: 'user-1',
+      id: USER_UUID,
       email: 'user@example.com',
       password_hash: '$2a$10$abcdef',
       full_name: 'Regular User',
@@ -113,8 +133,8 @@ beforeEach(() => {
   ]
 })
 
-const createAccessToken = (userId, role = 'user') =>
-  jwt.sign({ userId, role, type: 'access' }, process.env.JWT_SECRET)
+const createAdminToken = () => jwt.sign({ userId: ADMIN_UUID, role: 'admin', type: 'access' }, process.env.JWT_SECRET)
+const createUserToken  = () => jwt.sign({ userId: USER_UUID,  role: 'user',  type: 'access' }, process.env.JWT_SECRET)
 
 const requestJson = ({ method, path, token, body }) =>
   new Promise((resolve, reject) => {
@@ -159,6 +179,8 @@ const requestJson = ({ method, path, token, body }) =>
     req.end()
   })
 
+// ─── GET /api/v1/admin/users ──────────────────────────────────────────────────
+
 test('GET /api/v1/admin/users returns 401 when token is missing', async () => {
   const response = await requestJson({
     method: 'GET',
@@ -173,7 +195,7 @@ test('GET /api/v1/admin/users returns 403 when user is not admin', async () => {
   const response = await requestJson({
     method: 'GET',
     path: '/api/v1/admin/users',
-    token: createAccessToken('user-1', 'user'),
+    token: createUserToken(),
   })
 
   assert.equal(response.statusCode, 403)
@@ -185,23 +207,118 @@ test('GET /api/v1/admin/users returns 200 and list of users for admin', async ()
   const response = await requestJson({
     method: 'GET',
     path: '/api/v1/admin/users',
-    token: createAccessToken('admin-1', 'admin'),
+    token: createAdminToken(),
   })
 
   assert.equal(response.statusCode, 200)
   assert.equal(response.body.success, true)
   assert.equal(response.body.data.length, 2)
-  
+
   // Verify user details are returned and passwords are excluded
-  const adminUser = response.body.data.find(u => u.id === 'admin-1')
+  const adminUser = response.body.data.find(u => u.id === ADMIN_UUID)
   assert.equal(adminUser.fullName, 'Admin User')
   assert.equal(adminUser.email, 'admin@example.com')
   assert.equal(adminUser.role, 'admin')
   assert.equal(adminUser.passwordHash, undefined)
 
-  const regUser = response.body.data.find(u => u.id === 'user-1')
+  const regUser = response.body.data.find(u => u.id === USER_UUID)
   assert.equal(regUser.fullName, 'Regular User')
   assert.equal(regUser.email, 'user@example.com')
   assert.equal(regUser.role, 'user')
   assert.equal(regUser.passwordHash, undefined)
+})
+
+// ─── PATCH /api/v1/admin/users/:id/status ────────────────────────────────────
+
+const UNKNOWN_UUID = '00000000-0000-4000-a000-000000000000'
+
+test('PATCH /api/v1/admin/users/:id/status returns 401 when token is missing', async () => {
+  const response = await requestJson({
+    method: 'PATCH',
+    path: `/api/v1/admin/users/${USER_UUID}/status`,
+    body: { isActive: false },
+  })
+
+  assert.equal(response.statusCode, 401)
+  assert.equal(response.body.success, false)
+})
+
+test('PATCH /api/v1/admin/users/:id/status returns 403 when user is not admin', async () => {
+  const response = await requestJson({
+    method: 'PATCH',
+    path: `/api/v1/admin/users/${USER_UUID}/status`,
+    token: createUserToken(),
+    body: { isActive: false },
+  })
+
+  assert.equal(response.statusCode, 403)
+  assert.equal(response.body.success, false)
+  assert.match(response.body.message, /Forbidden: You do not have permission/)
+})
+
+test('PATCH /api/v1/admin/users/:id/status returns 400 when body is invalid (missing isActive)', async () => {
+  const response = await requestJson({
+    method: 'PATCH',
+    path: `/api/v1/admin/users/${USER_UUID}/status`,
+    token: createAdminToken(),
+    body: {},
+  })
+
+  assert.equal(response.statusCode, 400)
+  assert.equal(response.body.success, false)
+  assert.equal(response.body.code, 'VALIDATION_ERROR')
+})
+
+test('PATCH /api/v1/admin/users/:id/status returns 400 when body has wrong type (isActive is string)', async () => {
+  const response = await requestJson({
+    method: 'PATCH',
+    path: `/api/v1/admin/users/${USER_UUID}/status`,
+    token: createAdminToken(),
+    body: { isActive: 'yes' },
+  })
+
+  assert.equal(response.statusCode, 400)
+  assert.equal(response.body.success, false)
+  assert.equal(response.body.code, 'VALIDATION_ERROR')
+})
+
+test('PATCH /api/v1/admin/users/:id/status returns 400 when admin tries to deactivate themselves', async () => {
+  const response = await requestJson({
+    method: 'PATCH',
+    path: `/api/v1/admin/users/${ADMIN_UUID}/status`,
+    token: createAdminToken(),
+    body: { isActive: false },
+  })
+
+  assert.equal(response.statusCode, 400)
+  assert.equal(response.body.success, false)
+  assert.equal(response.body.code, 'SELF_STATUS_UPDATE_BLOCKED')
+})
+
+test('PATCH /api/v1/admin/users/:id/status returns 404 when target user does not exist', async () => {
+  const response = await requestJson({
+    method: 'PATCH',
+    path: `/api/v1/admin/users/${UNKNOWN_UUID}/status`,
+    token: createAdminToken(),
+    body: { isActive: false },
+  })
+
+  assert.equal(response.statusCode, 404)
+  assert.equal(response.body.success, false)
+  assert.equal(response.body.code, 'USER_NOT_FOUND')
+})
+
+test('PATCH /api/v1/admin/users/:id/status returns 200 and updates user status successfully', async () => {
+  const response = await requestJson({
+    method: 'PATCH',
+    path: `/api/v1/admin/users/${USER_UUID}/status`,
+    token: createAdminToken(),
+    body: { isActive: false },
+  })
+
+  assert.equal(response.statusCode, 200)
+  assert.equal(response.body.success, true)
+  assert.match(response.body.message, /Cập nhật trạng thái người dùng thành công/)
+  assert.equal(response.body.data.id, USER_UUID)
+  assert.equal(response.body.data.isActive, false)
 })
