@@ -26,6 +26,13 @@ class UserRepository {
     )
   }
 
+  async findByIdIncludingInactive(id) {
+    return this.#findOneBy(
+      'SELECT id, email, role, is_active FROM users WHERE id = $1',
+      [id]
+    )
+  }
+
   async findById(userId) {
     return this.#findOneBy(
       'SELECT id, email, full_name, date_of_birth, gender, phone_number, role, is_active, created_at, updated_at FROM users WHERE id = $1 AND is_active = true',
@@ -75,6 +82,14 @@ class UserRepository {
       'SELECT id, email, full_name, date_of_birth, gender, phone_number, role, is_active, created_at, updated_at FROM users ORDER BY created_at DESC'
     )
     return rows.map(row => User.fromRow(row))
+  }
+
+  async updateStatus(id, isActive) {
+    const { rows } = await this.#pool.query(
+      'UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, is_active',
+      [isActive, id]
+    )
+    return rows[0] ? { id: rows[0].id, email: rows[0].email, isActive: rows[0].is_active } : null
   }
 
   async save(user) {
