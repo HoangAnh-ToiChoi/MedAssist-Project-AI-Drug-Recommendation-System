@@ -14,7 +14,6 @@
 'use strict';
 
 const axios = require('axios');
-const cheerio = require('cheerio');
 const { createObjectCsvWriter } = require('csv-writer');
 const fs = require('fs');
 const path = require('path');
@@ -24,6 +23,7 @@ const DEFAULTS = {
   minDrugs: 220,
   minSymptoms: 220,
   minMappings: 320,
+  drugEnrichLimit: 80,
   outputDir: path.resolve(__dirname, '../data/crawled/more'),
   requestDelayMs: 250,
   timeoutMs: 20000,
@@ -178,6 +178,7 @@ function parseArgs() {
     if (key === 'min-drugs') parsed.minDrugs = Number(rawValue);
     if (key === 'min-symptoms') parsed.minSymptoms = Number(rawValue);
     if (key === 'min-mappings') parsed.minMappings = Number(rawValue);
+    if (key === 'drug-enrich-limit') parsed.drugEnrichLimit = Number(rawValue);
     if (key === 'output-dir') parsed.outputDir = path.resolve(rawValue);
   }
   return parsed;
@@ -231,9 +232,95 @@ async function fetchJson(url) {
   return response.data;
 }
 
-async function fetchText(url) {
-  const response = await http.get(url, { responseType: 'text' });
-  return response.data;
+function truncateText(value, maxLength = 320) {
+  const text = String(value || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 3).trim()}...`;
+}
+
+function isGenericDrugDescription(description) {
+  const text = String(description || '').trim().toLowerCase();
+  if (!text) return true;
+  return (
+    text.startsWith('scraped from category:') ||
+    text.startsWith('scraped from category ') ||
+    text.includes('hoạt chất được ghi nhận trong') ||
+    text.includes('dữ liệu thuốc nền đã được kiểm tra thủ công')
+  );
+}
+
+function isDefaultContraindications(drug) {
+  return String(drug.contraindications || '').trim() === defaultContraindications(drug.category, drug.name);
+}
+
+function buildDrugLookupRefs(name, genericName) {
+  const lookupName = normalizeTitle(genericName || name);
+  const encodedName = encodeURIComponent(lookupName);
+  const encodedWiki = encodeURIComponent(normalizeTitle(name));
+  return {
+    openfda_label_search_url: `https://api.fda.gov/drug/label.json?search=${encodeURIComponent(`openfda.generic_name.exact:"${lookupName}"`)}&limit=1`,
+    wikipedia_summary_url: `https://en.wikipedia.org/api/rest_v1/page/summary/${encodedWiki}`,
+    drugbank_search_url: `https://go.drugbank.com/unearth/q?searcher=drugs&query=${encodedName}`,
+    ctdbase_search_url: `https://ctdbase.org/basicQuery.go?bqCat=chem&bq=${encodedName}`,
+    dav_lookup_url: 'https://dav.gov.vn/tra-cuu-thuoc.html',
+    dav_otc_lookup_url: `https://dichvucong.dav.gov.vn/congbothuockhongkedon/index?keyWord=${encodedName}`,
+  };
+}
+
+function initDrugRecord(record) {
+  return {
+    ...record,
+    _source_tags: record.source ? [record.source] : [],
+    _source_notes: record.source ? [`${record.source}: ${truncateText(record.description, 160)}`] : [],
+    _review_flags: [],
+    _lookup_refs: buildDrugLookupRefs(record.name, record.generic_name),
+  };
+}
+
+function addUniqueValue(list, value) {
+  if (!value) return;
+  if (!list.includes(value)) list.push(value);
+}
+
+function addDrugSourceNote(drug, source, detail) {
+  addUniqueValue(drug._source_tags, source);
+  addUniqueValue(drug._source_notes, `${source}: ${truncateText(detail, 160)}`);
+}
+
+function addDrugReviewFlag(drug, flag) {
+  addUniqueValue(drug._review_flags, flag);
+}
+
+function firstNonEmptyLabelField(result, fieldNames) {
+  for (const field of fieldNames) {
+    const raw = result?.[field];
+    const text = truncateText(Array.isArray(raw) ? raw.join(' ') : raw, 320);
+    if (text) return text;
+  }
+  return '';
+}
+
+function buildWikipediaTitles(drug) {
+  return Array.from(
+    new Set(
+      [drug.name, drug.generic_name]
+        .map((value) => normalizeTitle(value))
+        .filter(Boolean),
+    ),
+  );
+}
+
+function summarizeMergedDrugSources(records) {
+  return records.reduce((acc, record) => {
+    for (const source of record._source_tags || []) {
+      acc[source] = (acc[source] || 0) + 1;
+    }
+    return acc;
+  }, {});
 }
 
 async function crawlWikipediaCategory(category, targetCount, report) {
@@ -267,7 +354,7 @@ async function crawlDrugs(config, report) {
   const drugs = new Map();
 
   for (const [name, category, dosage] of LOCAL_DRUGS) {
-    drugs.set(name.toLowerCase(), {
+    drugs.set(name.toLowerCase(), initDrugRecord({
       name,
       generic_name: name,
       category,
@@ -275,50 +362,50 @@ async function crawlDrugs(config, report) {
       contraindications: defaultContraindications(category, name),
       description: 'Dữ liệu thuốc nền đã được kiểm tra thủ công trong MedAssist.',
       source: 'Local curated',
-    });
+    }));
   }
 
   try {
     const fdaDrugs = await crawlOpenFdaIngredients(config.minDrugs, report);
     for (const drug of fdaDrugs) {
       const key = drug.name.toLowerCase();
-      if (!drugs.has(key)) drugs.set(key, drug);
+      if (!drugs.has(key)) drugs.set(key, initDrugRecord(drug));
     }
   } catch (error) {
     report.warnings.push(`openFDA ingredient crawl failed: ${error.message}`);
   }
 
-  if (drugs.size >= config.minDrugs) {
-    return Array.from(drugs.values()).slice(0, Math.max(config.minDrugs, drugs.size));
-  }
-
-  report.warnings.push('openFDA did not reach the requested minimum; using filtered Wikipedia fallback.');
-  for (const [category, type, dosage] of DRUG_CATEGORIES) {
-    if (drugs.size >= config.minDrugs + 80) break;
-    try {
-      const titles = await crawlWikipediaCategory(category, 500, report);
-      for (const rawTitle of titles) {
-        const name = normalizeTitle(rawTitle);
-        if (isBadTitle(name, 'drug')) continue;
-        const key = name.toLowerCase();
-        if (!drugs.has(key)) {
-          drugs.set(key, {
-            name,
-            generic_name: name,
-            category: type,
-            dosage_form: dosage,
-            contraindications: defaultContraindications(type, name),
-            description: `Scraped from ${category} on Wikipedia.`,
-            source: 'Wikipedia',
-          });
+  if (drugs.size < config.minDrugs) {
+    report.warnings.push('openFDA did not reach the requested minimum; using filtered Wikipedia fallback.');
+    for (const [category, type, dosage] of DRUG_CATEGORIES) {
+      if (drugs.size >= config.minDrugs + 80) break;
+      try {
+        const titles = await crawlWikipediaCategory(category, 500, report);
+        for (const rawTitle of titles) {
+          const name = normalizeTitle(rawTitle);
+          if (isBadTitle(name, 'drug')) continue;
+          const key = name.toLowerCase();
+          if (!drugs.has(key)) {
+            drugs.set(key, initDrugRecord({
+              name,
+              generic_name: name,
+              category: type,
+              dosage_form: dosage,
+              contraindications: defaultContraindications(type, name),
+              description: `Scraped from ${category} on Wikipedia.`,
+              source: 'Wikipedia',
+            }));
+          }
         }
+      } catch (error) {
+        report.warnings.push(`Wikipedia drug category failed (${category}): ${error.message}`);
       }
-    } catch (error) {
-      report.warnings.push(`Wikipedia drug category failed (${category}): ${error.message}`);
     }
   }
 
-  return Array.from(drugs.values()).slice(0, Math.max(config.minDrugs, drugs.size));
+  const records = Array.from(drugs.values()).slice(0, Math.max(config.minDrugs, drugs.size));
+  await enrichDrugRecords(records, config, report);
+  return records;
 }
 
 async function crawlOpenFdaIngredients(minDrugs, report) {
@@ -376,6 +463,145 @@ function inferDosageForm(category) {
   if (category === 'bronchodilator') return 'inhaler';
   if (category === 'antibiotic') return 'tablet_or_capsule';
   return 'various';
+}
+
+async function enrichDrugRecords(drugs, config, report) {
+  const enrichLimit = Math.min(drugs.length, Math.max(0, config.drugEnrichLimit || 0));
+  let openFdaMatches = 0;
+  let wikipediaMatches = 0;
+
+  for (let index = 0; index < drugs.length; index += 1) {
+    const drug = drugs[index];
+
+    if (index < enrichLimit) {
+      if (await enrichDrugFromOpenFdaLabel(drug, report)) openFdaMatches += 1;
+      await sleep(Math.max(100, Math.floor(config.requestDelayMs / 2)));
+
+      if (await enrichDrugFromWikipedia(drug, report)) wikipediaMatches += 1;
+      await sleep(Math.max(100, Math.floor(config.requestDelayMs / 2)));
+    } else {
+      addDrugReviewFlag(
+        drug,
+        `Network enrichment skipped by limit (${config.drugEnrichLimit}); keep lookup refs for manual review.`,
+      );
+    }
+  }
+
+  report.sources.push({ source: 'DrugBank', detail: 'candidate lookup URLs generated', records: drugs.length });
+  report.sources.push({ source: 'CTDbase', detail: 'candidate lookup URLs generated', records: drugs.length });
+  report.sources.push({ source: 'DAV', detail: 'candidate lookup URLs generated', records: drugs.length });
+  report.enrichment = {
+    total_drugs: drugs.length,
+    network_enriched_drugs: enrichLimit,
+    openfda_label_matches: openFdaMatches,
+    wikipedia_summary_matches: wikipediaMatches,
+    drugbank_lookup_candidates: drugs.length,
+    ctdbase_lookup_candidates: drugs.length,
+    dav_lookup_candidates: drugs.length,
+  };
+}
+
+async function enrichDrugFromOpenFdaLabel(drug, report) {
+  const searchTerms = Array.from(
+    new Set(
+      [drug.generic_name, drug.name]
+        .map((value) => normalizeTitle(value).replace(/"/g, ''))
+        .filter(Boolean),
+    ),
+  );
+
+  for (const term of searchTerms) {
+    const queries = [
+      `openfda.generic_name.exact:"${term}"`,
+      `openfda.substance_name.exact:"${term}"`,
+      `openfda.brand_name.exact:"${term}"`,
+    ];
+
+    for (const query of queries) {
+      try {
+        const url = `https://api.fda.gov/drug/label.json?search=${encodeURIComponent(query)}&limit=1`;
+        const data = await fetchJson(url);
+        const result = data?.results?.[0];
+        if (!result) continue;
+
+        const indication = firstNonEmptyLabelField(result, [
+          'indications_and_usage',
+          'purpose',
+          'description',
+          'mechanism_of_action',
+        ]);
+        const contraindications = firstNonEmptyLabelField(result, [
+          'contraindications',
+          'do_not_use',
+          'warnings',
+          'warnings_and_cautions',
+          'boxed_warning',
+          'stop_use',
+        ]);
+        const brandNames = Array.isArray(result?.openfda?.brand_name)
+          ? Array.from(new Set(result.openfda.brand_name)).slice(0, 5)
+          : [];
+
+        if (indication && isGenericDrugDescription(drug.description)) {
+          drug.description = indication;
+        }
+        if (contraindications && isDefaultContraindications(drug)) {
+          drug.contraindications = contraindications;
+        }
+        if (brandNames.length) {
+          addDrugReviewFlag(drug, `openFDA label brand names: ${brandNames.join(', ')}`);
+        }
+
+        drug._lookup_refs.openfda_label_search_url = url;
+        addDrugSourceNote(drug, 'openFDA label', `Matched label by query ${query}`);
+        return true;
+      } catch (error) {
+        const status = error.response?.status;
+        if (status === 404) continue;
+        if (status === 429) {
+          report.warnings.push(`openFDA label rate-limited while enriching ${drug.name}.`);
+          return false;
+        }
+        report.warnings.push(`openFDA label lookup failed for ${drug.name}: ${error.message}`);
+        return false;
+      }
+    }
+  }
+
+  return false;
+}
+
+async function enrichDrugFromWikipedia(drug, report) {
+  for (const title of buildWikipediaTitles(drug)) {
+    try {
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+      const data = await fetchJson(url);
+      const extract = truncateText(data?.extract, 320);
+      if (!extract) continue;
+      if (String(data?.type || '').toLowerCase() === 'disambiguation') continue;
+
+      if (isGenericDrugDescription(drug.description)) {
+        drug.description = extract;
+      }
+      if (data?.content_urls?.desktop?.page) {
+        drug._lookup_refs.wikipedia_page_url = data.content_urls.desktop.page;
+      }
+      drug._lookup_refs.wikipedia_summary_url = url;
+      addDrugSourceNote(drug, 'Wikipedia summary', `Matched summary page ${data?.title || title}`);
+      return true;
+    } catch (error) {
+      const status = error.response?.status;
+      if (status === 404) continue;
+      if (status === 429) {
+        report.warnings.push(`Wikipedia summary rate-limited while enriching ${drug.name}.`);
+        return false;
+      }
+      report.warnings.push(`Wikipedia summary lookup failed for ${drug.name}: ${error.message}`);
+      return false;
+    }
+  }
+
+  return false;
 }
 
 async function crawlSymptoms(config, report) {
@@ -472,26 +698,27 @@ async function crawlEbiSymptoms(report) {
 }
 
 async function crawlBestEffortSources(report) {
-  await statusPage('DrugBank', 'https://www.drugbank.com/drugs/DB00316', report);
-  await statusPage('CTDbase', 'https://ctdbase.org/detail.go?type=chem&acc=D000082', report);
-  await statusPage('DAV', 'https://dav.gov.vn/', report);
+  report.sources.push({
+    source: 'DrugBank',
+    detail: 'lookup workflow enabled via generated review URLs; automated scraping kept best-effort only',
+    records: 1,
+  });
+  report.sources.push({
+    source: 'CTDbase',
+    detail: 'lookup workflow enabled via generated review URLs; automated scraping kept best-effort only',
+    records: 1,
+  });
+  report.sources.push({
+    source: 'DAV',
+    detail: 'lookup workflow enabled via generated review URLs; automated scraping kept best-effort only',
+    records: 1,
+  });
   try {
     const data = await fetchJson('https://www.ebi.ac.uk/ols4/api/ontologies');
     const count = Array.isArray(data?._embedded?.ontologies) ? data._embedded.ontologies.length : 1;
     report.sources.push({ source: 'EBI', detail: 'OLS API status check', records: count });
   } catch (error) {
     report.warnings.push(`EBI API status check failed: ${error.message}`);
-  }
-}
-
-async function statusPage(source, url, report) {
-  try {
-    const html = await fetchText(url);
-    const $ = cheerio.load(html);
-    const title = $('h1').first().text().trim() || $('title').text().trim();
-    report.sources.push({ source, detail: 'public page status check', records: title ? 1 : 0 });
-  } catch (error) {
-    report.warnings.push(`${source} public page unavailable for script access: ${error.message}`);
   }
 }
 
@@ -677,6 +904,27 @@ function summarizeSources(records) {
   }, {});
 }
 
+function buildDrugReviewRows(drugs) {
+  return drugs.map((drug) => ({
+    name: drug.name,
+    generic_name: drug.generic_name,
+    category: drug.category,
+    dosage_form: drug.dosage_form,
+    merged_sources: (drug._source_tags || []).join(' | '),
+    description: drug.description,
+    contraindications: drug.contraindications,
+    source_notes: (drug._source_notes || []).join(' || '),
+    review_flags: (drug._review_flags || []).join(' | '),
+    openfda_label_search_url: drug._lookup_refs?.openfda_label_search_url || '',
+    wikipedia_summary_url: drug._lookup_refs?.wikipedia_summary_url || '',
+    wikipedia_page_url: drug._lookup_refs?.wikipedia_page_url || '',
+    drugbank_search_url: drug._lookup_refs?.drugbank_search_url || '',
+    ctdbase_search_url: drug._lookup_refs?.ctdbase_search_url || '',
+    dav_lookup_url: drug._lookup_refs?.dav_lookup_url || '',
+    dav_otc_lookup_url: drug._lookup_refs?.dav_otc_lookup_url || '',
+  }));
+}
+
 function parseFirstCsvColumn(line) {
   if (!line) return '';
   if (!line.startsWith('"')) return line.split(',')[0].trim();
@@ -784,7 +1032,12 @@ async function main() {
   const config = parseArgs();
   const report = {
     generated_at: new Date().toISOString(),
-    minimums: { drugs: config.minDrugs, symptoms: config.minSymptoms, mappings: config.minMappings },
+    minimums: {
+      drugs: config.minDrugs,
+      symptoms: config.minSymptoms,
+      mappings: config.minMappings,
+      drug_network_enrichment: config.drugEnrichLimit,
+    },
     sources: [],
     warnings: [],
   };
@@ -803,6 +1056,7 @@ async function main() {
 
   report.counts = { symptoms: symptoms.length, drugs: drugs.length, drug_symptoms: mappings.length };
   report.record_sources = { symptoms: summarizeSources(symptoms), drugs: summarizeSources(drugs) };
+  report.merged_record_sources = { drugs: summarizeMergedDrugSources(drugs) };
   if (symptoms.length < config.minSymptoms || drugs.length < config.minDrugs || mappings.length < config.minMappings) {
     report.warnings.push('Generated data did not reach one or more configured minimums.');
   }
@@ -823,11 +1077,34 @@ async function main() {
     ['symptom_code', 'drug_name', 'confidence_score', 'notes'],
     mappings,
   );
+  await writeCsv(
+    path.join(config.outputDir, 'drug_sources_review.csv'),
+    [
+      'name',
+      'generic_name',
+      'category',
+      'dosage_form',
+      'merged_sources',
+      'description',
+      'contraindications',
+      'source_notes',
+      'review_flags',
+      'openfda_label_search_url',
+      'wikipedia_summary_url',
+      'wikipedia_page_url',
+      'drugbank_search_url',
+      'ctdbase_search_url',
+      'dav_lookup_url',
+      'dav_otc_lookup_url',
+    ],
+    buildDrugReviewRows(drugs),
+  );
 
   const obsoleteMappingCsv = path.join(config.outputDir, 'drug_symptoms_scraped.csv');
   if (fs.existsSync(obsoleteMappingCsv)) fs.rmSync(obsoleteMappingCsv);
 
   fs.writeFileSync(path.join(config.outputDir, 'scrape_import.sql'), buildSql(symptoms, drugs, mappings), 'utf8');
+  fs.writeFileSync(path.join(config.outputDir, 'drugs_enriched.json'), JSON.stringify(drugs, null, 2), 'utf8');
   fs.writeFileSync(path.join(config.outputDir, 'scrape_report.json'), JSON.stringify(report, null, 2), 'utf8');
 
   console.log('Done.');

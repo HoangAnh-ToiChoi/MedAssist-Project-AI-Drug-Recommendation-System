@@ -74,6 +74,30 @@ class AllergyRepository {
     return rows
   }
 
+  async findExactDrugMatch(cleanName) {
+    const { rows } = await this.#pool.query(
+      `SELECT id, name, generic_name 
+       FROM drugs 
+       WHERE LOWER(name) = $1 OR LOWER(generic_name) = $1 
+       LIMIT 1`,
+      [cleanName]
+    )
+    return rows[0] || null
+  }
+
+  async findFuzzyCandidates(query, limit = 15) {
+    const cleanQuery = String(query || '').trim().toLowerCase()
+    const { rows } = await this.#pool.query(
+      `SELECT id, name, generic_name
+       FROM drugs
+       WHERE name % $1 OR generic_name % $1
+       ORDER BY similarity(name, $1) DESC, similarity(generic_name, $1) DESC
+       LIMIT $2`,
+      [cleanQuery, limit]
+    )
+    return rows
+  }
+
   async updateAllergy({ id, userId, drugId, reactionType, severity }) {
     const { rows } = await this.#pool.query(
       `WITH updated AS (

@@ -75,6 +75,24 @@ const mockPool = {
     }
 
     if (sql.includes('SELECT id, name, generic_name FROM drugs') || sql.includes('SELECT id, name, generic_name, category FROM drugs')) {
+      if (sql.includes('LOWER(name) = $1') || sql.includes('LOWER(generic_name) = $1')) {
+        const q = params[0].toLowerCase()
+        const rows = mockState.drugs.filter(
+          (item) => item.name.toLowerCase() === q || (item.generic_name || '').toLowerCase() === q
+        )
+        return { rows }
+      }
+
+      if (sql.includes('similarity(name, $1) DESC') || sql.includes('WHERE name % $1')) {
+        const q = params[0].toLowerCase()
+        const rows = mockState.drugs.filter(
+          (item) =>
+            item.name.toLowerCase().includes(q) ||
+            (item.generic_name || '').toLowerCase().includes(q)
+        )
+        return { rows }
+      }
+
       const q = params && params[0] ? params[0].replace(/%/g, '').toLowerCase() : null
       let rows = mockState.drugs
       if (q) {

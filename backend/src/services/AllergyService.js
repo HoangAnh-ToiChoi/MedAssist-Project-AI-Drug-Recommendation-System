@@ -128,21 +128,25 @@ class AllergyService {
     }
 
     const cleanInput = drugName.trim().toLowerCase()
-    const allDrugs = await this.#allergyRepository.getAllDrugs()
+
+    // 1. First attempt: Quick exact match directly in DB
+    const exactMatch = await this.#allergyRepository.findExactDrugMatch(cleanInput)
+    if (exactMatch) {
+      return exactMatch.id
+    }
+
+    // 2. Fetch only the top 15 candidate matches using Trigram Index
+    const candidates = await this.#allergyRepository.findFuzzyCandidates(cleanInput, 15)
 
     let bestMatch = null
     let maxScore = 0
 
-    for (const drug of allDrugs) {
+    // 3. Compute Dice Coefficient on the small candidate pool
+    for (const drug of candidates) {
       const name = (drug.name || '').toLowerCase()
       const genericName = (drug.generic_name || '').toLowerCase()
 
-      // 1. Exact matches (highest priority)
-      if (name === cleanInput || genericName === cleanInput) {
-        return drug.id
-      }
-
-      // 2. Substring matches
+      // Substring matches
       let substringScore = 0
       if (name.includes(cleanInput) || cleanInput.includes(name)) {
         substringScore = 0.8
@@ -151,7 +155,7 @@ class AllergyService {
         substringScore = Math.max(substringScore, 0.8)
       }
 
-      // 3. Dice similarity
+      // Dice similarity
       const nameSimilarity = this.#getSimilarity(cleanInput, name)
       const genericSimilarity = this.#getSimilarity(cleanInput, genericName)
       const similarityScore = Math.max(nameSimilarity, genericSimilarity)
