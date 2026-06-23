@@ -455,6 +455,7 @@ class AuthService {
           googleId: googleId,
           isActive: true,
         });
+        await user.changePassword(crypto.randomUUID(), bcrypt)
         await this.#userRepo.save(user);
       }
     }
@@ -501,6 +502,7 @@ class AuthService {
           facebookId: facebookId,
           isActive: true,
         });
+        await user.changePassword(crypto.randomUUID(), bcrypt)
         await this.#userRepo.save(user);
       }
     }
@@ -549,6 +551,7 @@ class AuthService {
           appleId: appleId,
           isActive: true,
         });
+        await user.changePassword(crypto.randomUUID(), bcrypt)
         await this.#userRepo.save(user);
       }
     }
