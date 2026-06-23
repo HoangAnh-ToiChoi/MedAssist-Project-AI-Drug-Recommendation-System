@@ -8,9 +8,25 @@ from services.chatbot import chat_with_fallback
 
 logger = logging.getLogger("grounded_chatbot")
 
+DEFAULT_DISCLAIMER = (
+    "Thong tin chi mang tinh tham khao va khong thay the bac si hoac co so y te. "
+    "Khong tu y them thuoc, doi thuoc, hoac bo qua canh bao an toan."
+)
+
 
 def _trim_text(value: Optional[str]) -> str:
     return (value or "").strip()
+
+
+def _ensure_disclaimer(value: Optional[str]) -> str:
+    text = _trim_text(value)
+    normalized = text.lower()
+    markers = ["tham khao", "bac si", "co so y te", "khong thay the", "khong tu y"]
+    if any(marker in normalized for marker in markers):
+        return text
+    if not text:
+        return DEFAULT_DISCLAIMER
+    return f"{text} {DEFAULT_DISCLAIMER}"
 
 
 def _extract_json_object(content: str) -> Optional[Dict[str, str]]:
@@ -42,7 +58,7 @@ def _extract_json_object(content: str) -> Optional[Dict[str, str]]:
         return None
 
     answer = _trim_text(parsed.get("answer"))
-    safety_note = _trim_text(parsed.get("safety_note"))
+    safety_note = _ensure_disclaimer(parsed.get("safety_note"))
     if not answer or not safety_note:
         return None
 
@@ -72,7 +88,7 @@ def _build_fallback_response(error: Optional[str], request: GroundedChatRequest)
         "Neu ban can, hay hoi ro hon ve ly do goi y, khi nao nen di kham, hoac cach doc canh bao an toan."
     )
 
-    safety_note = (
+    safety_note = _ensure_disclaimer(
         "Thong tin chi mang tinh tham khao va khong thay the bac si. "
         "Khong tu y them thuoc, doi thuoc, hoac bo qua canh bao da duoc backend loc san."
     )

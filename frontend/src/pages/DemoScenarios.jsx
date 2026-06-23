@@ -8,7 +8,7 @@ const DEMO_SCENARIOS = [
     title: 'Demo Hô hấp an toàn',
     summary: 'Ho, sốt nhẹ, ưu tiên explanation grounded và danh sách thuốc đã qua lọc an toàn.',
     data: {
-      id: 'demo-rec-001',
+      id: '11111111-1111-4111-8111-111111111111',
       specialty: 'ho_hap',
       matchedSymptoms: ['ho', 'sot'],
       topDiseases: [
@@ -52,7 +52,7 @@ const DEMO_SCENARIOS = [
         },
       },
       meta: {
-        recommendationId: 'demo-rec-001',
+        recommendationId: '11111111-1111-4111-8111-111111111111',
         specialty: 'ho_hap',
         symptoms: ['Ho', 'Sốt'],
         severity: 'medium',
@@ -67,7 +67,7 @@ const DEMO_SCENARIOS = [
     title: 'Demo Tiêu hóa có cảnh báo',
     summary: 'Đau bụng, buồn nôn, có cảnh báo cần đi khám nếu dấu hiệu nặng lên.',
     data: {
-      id: 'demo-rec-002',
+      id: '22222222-2222-4222-8222-222222222222',
       specialty: 'tieu_hoa',
       matchedSymptoms: ['dau_bung', 'buon_non'],
       topDiseases: [
@@ -103,7 +103,7 @@ const DEMO_SCENARIOS = [
         },
       },
       meta: {
-        recommendationId: 'demo-rec-002',
+        recommendationId: '22222222-2222-4222-8222-222222222222',
         specialty: 'tieu_hoa',
         symptoms: ['Đau bụng', 'Buồn nôn'],
         severity: 'medium',

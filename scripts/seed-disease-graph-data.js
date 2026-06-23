@@ -31,6 +31,16 @@ const DEFAULTS = {
   userAgent: 'MedAssistStudentCrawler/1.0 (+educational offline seed/sync script)',
 };
 
+const CLINICAL_TABLE_PAGE_SIZE = 500;
+const CLINICAL_TABLE_TERMS = [
+  ...'abcdefghijklmnopqrstuvwxyz',
+  'ab', 'ac', 'ad', 'al', 'an', 'ar', 'as', 'at',
+  'be', 'br', 'ca', 'ce', 'ch', 'co', 'de', 'di',
+  'en', 'ga', 'he', 'hy', 'in', 'ki', 'li', 'lu',
+  'ma', 'me', 'mi', 'ne', 'no', 'pa', 'pe', 'po',
+  'pr', 're', 'st', 'th', 'tr', 'ur',
+];
+
 const PUBLIC_DISEASE_SOURCES = new Set(['clinical_tables_conditions']);
 const PUBLIC_DRUG_SOURCES = new Set(['rxterms', 'rxnorm', 'openfda_label']);
 const SYNTHETIC_SOURCES = new Set(['local_synthetic_review']);
@@ -383,33 +393,50 @@ function buildSyntheticDrugSeeds(targetCount) {
 
 async function fetchClinicalTableConditions(options, keywordConfig, icd10Rules, warnings) {
   const rows = [];
-  const terms = ['hypertension', 'diabetes', 'asthma', 'pneumonia', 'arthritis', 'infection', 'cancer', 'kidney', 'pregnancy', 'depression'];
-  for (const term of terms.slice(0, options.maxApiPages)) {
+  let requestCount = 0;
+  for (const term of CLINICAL_TABLE_TERMS) {
+    if (requestCount >= options.maxApiPages) break;
     try {
-      const response = await http.get('https://clinicaltables.nlm.nih.gov/api/conditions/v3/search', {
-        params: { terms: term, maxList: 100, df: 'primary_name,consumer_name', ef: 'icd10cm_codes' },
-      });
-      const dataRows = response.data?.[3] || [];
-      const icd10Rows = response.data?.[2]?.icd10cm_codes || [];
-      for (const [index, row] of dataRows.entries()) {
-        const primary = normalizeTitle(row?.[0]);
-        if (!primary) continue;
-        const consumer = normalizeTitle(row?.[1]);
-        const icd10Values = Array.isArray(icd10Rows[index]) ? icd10Rows[index] : [];
-        const icd10 = normalizeTitle(icd10Values[0]);
-        rows.push(makeDisease([
-          chooseDiseaseType({ name: primary, icd10Code: icd10 }, keywordConfig, icd10Rules),
-          primary,
-          icd10 || '',
-          consumer && consumer !== primary ? [consumer] : [],
-          [],
-          ['Clinical review'],
-        ], keywordConfig, icd10Rules, 'clinical_tables_conditions'));
+      for (let offset = 0; requestCount < options.maxApiPages; offset += CLINICAL_TABLE_PAGE_SIZE) {
+        const response = await http.get('https://clinicaltables.nlm.nih.gov/api/conditions/v3/search', {
+          params: {
+            terms: term,
+            maxList: CLINICAL_TABLE_PAGE_SIZE,
+            offset,
+            df: 'primary_name,consumer_name',
+            ef: 'icd10cm_codes',
+          },
+        });
+        requestCount += 1;
+
+        const total = Number(response.data?.[0] || 0);
+        const dataRows = response.data?.[3] || [];
+        const icd10Rows = response.data?.[2]?.icd10cm_codes || [];
+        for (const [index, row] of dataRows.entries()) {
+          const primary = normalizeTitle(row?.[0]);
+          if (!primary) continue;
+          const consumer = normalizeTitle(row?.[1]);
+          const icd10Values = Array.isArray(icd10Rows[index]) ? icd10Rows[index] : [];
+          const icd10 = normalizeTitle(icd10Values[0]);
+          rows.push(makeDisease([
+            chooseDiseaseType({ name: primary, icd10Code: icd10 }, keywordConfig, icd10Rules),
+            primary,
+            icd10 || '',
+            consumer && consumer !== primary ? [consumer] : [],
+            [],
+            ['Clinical review'],
+          ], keywordConfig, icd10Rules, 'clinical_tables_conditions'));
+        }
+
+        await sleep(options.requestDelayMs);
+
+        if (dataRows.length < CLINICAL_TABLE_PAGE_SIZE || offset + CLINICAL_TABLE_PAGE_SIZE >= total) {
+          break;
+        }
       }
-      await sleep(options.requestDelayMs);
     } catch (error) {
       warnings.push(`Clinical Tables conditions fetch failed for "${term}": ${error.message}`);
-      break;
+      continue;
     }
   }
   return rows;

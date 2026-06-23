@@ -747,6 +747,23 @@ const chatbotControllerMock = {
   },
 }
 
+const aiAuditInsightsControllerMock = {
+  getSummary(req, res) {
+    res.json({
+      success: true,
+      message: 'AI audit summary loaded',
+      data: { rowCount: 0, fallbackRate: 0 },
+    })
+  },
+  getRecentEvents(req, res) {
+    res.json({
+      success: true,
+      message: 'AI audit events loaded',
+      data: [],
+    })
+  },
+}
+
 const authMiddlewareMock = (req, res, next) => {
   const header = req.headers.authorization
 
@@ -759,7 +776,7 @@ const authMiddlewareMock = (req, res, next) => {
     return
   }
 
-  req.user = { id: 'user-1', userId: 'user-1', role: 'patient' }
+  req.user = { id: 'user-1', userId: 'user-1', role: 'admin' }
   next()
 }
 
@@ -769,6 +786,7 @@ const containerMock = {
     if (name === 'symptomController') return symptomControllerMock
     if (name === 'recommendationController') return recommendationControllerMock
     if (name === 'chatbotController') return chatbotControllerMock
+    if (name === 'aiAuditInsightsController') return aiAuditInsightsControllerMock
     throw new Error(`Unexpected container resolve: ${name}`)
   },
 }

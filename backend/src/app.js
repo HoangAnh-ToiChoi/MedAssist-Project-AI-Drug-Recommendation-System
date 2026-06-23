@@ -7,6 +7,7 @@ const specialtyRoutes = require('./routes/specialtyRoutes')
 const historyRoutes = require('./routes/historyRoutes')
 const allergyRoutes = require('./routes/allergyRoutes')
 const chatbotRoutes = require('./routes/chatbotRoutes')
+const aiInsightsRoutes = require('./routes/aiInsightsRoutes')
 const appConfig = require('./config/appConfig')
 
 const logger = require('./utils/logger')
@@ -80,6 +81,7 @@ app.use('/api/v1/specialties', specialtyRoutes)
 app.use('/api/v1/history', historyRoutes)
 app.use('/api/v1/allergies', allergyRoutes)
 app.use('/api/v1/chatbot', chatbotRoutes)
+app.use('/api/v1/ai/insights', aiInsightsRoutes)
 
 app.use(errorHandler)
 

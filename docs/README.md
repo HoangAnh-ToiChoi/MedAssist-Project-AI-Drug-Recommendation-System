@@ -92,6 +92,27 @@ GROQ_API_KEY=...
 ZHIPU_API_KEY=...
 ```
 
+Deploy `ai-service` lên Railway:
+
+```bash
+Root Directory: ai-service
+Start Command: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+Health Check Path: /health
+```
+
+Biến môi trường tối thiểu trên Railway:
+
+```env
+GEMINI_API_KEY=...
+GROQ_API_KEY=...
+ZHIPU_API_KEY=...
+GEMINI_MODEL=...
+GROQ_MODEL=...
+ZHIPU_MODEL=...
+AI_PROVIDER_BREAKER_FAILURE_THRESHOLD=2
+AI_PROVIDER_BREAKER_COOLDOWN_SECONDS=30
+```
+
 ## Cách test
 
 ### Data pipeline
@@ -106,6 +127,33 @@ AI observability guardrail check:
 
 ```bash
 node scripts/check-ai-observability.js
+```
+
+Audit review report from real DB logs:
+
+```bash
+node scripts/report-ai-audit-log.js
+node scripts/report-ai-audit-log.js --days=3 --event-type=grounded_chatbot
+node scripts/report-ai-audit-log.js --provider=gemini --limit=50
+```
+
+Grounded auto-eval smoke suite:
+
+```bash
+node scripts/run-ai-evals.js
+```
+
+Backend AI insights endpoints for authenticated users:
+
+```text
+GET /api/v1/ai/insights/summary?days=7
+GET /api/v1/ai/insights/events?days=7&limit=10
+```
+
+Frontend review page:
+
+```text
+/ai-insights
 ```
 
 DB rollout checklist:
@@ -156,7 +204,8 @@ npm run build
 - Chưa có review dashboard hay analytics UI cho audit/provenance.
 - Chưa có integration migration flow để apply `ai_audit_logs` vào DB production tự động.
 - Chưa có production sync pipeline bảo đảm `1000+ / 1000+` nếu public-source coverage thực tế không đạt ngưỡng strict mode.
-- Chưa có AI phase cho end-user chatbot đa lượt nâng cao, routing theo cost SLA thực tế, và quality evaluation sâu hơn.
+- Chưa có AI phase cho end-user chatbot đa lượt nâng cao và routing theo cost SLA thực tế.
+- Quality evaluation sâu hơn hiện đã có curated smoke auto-eval + audit CLI/report, nhưng chưa có benchmark set lớn hay auto judge pipeline riêng.
 
 ## Next step đề xuất
 
@@ -167,8 +216,8 @@ npm run build
   - DrugBank, DAV, CTDbase giữ ở lớp review/provenance.
 - Phase AI:
   - Thêm response style presets cho chatbot/explainer.
-  - Thêm health dashboard, fallback analytics, và audit review tools.
-  - Bổ sung quality evaluation sâu hơn cho explanation/chat theo provider.
+  - Mở rộng AI Insights thành admin analytics hoàn chỉnh khi branch admin được nhập vào workspace hiện tại.
+  - Bổ sung benchmark/auto-eval sâu hơn cho explanation/chat theo provider với tập ca lớn hơn.
 - Phase CI/CD:
   - Chạy `backend`, `frontend`, `ai-service` trong CI mặc định.
   - Tách live AI tests khỏi default suite như hiện trạng và chỉ bật bằng env.

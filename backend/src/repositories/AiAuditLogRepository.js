@@ -33,6 +33,42 @@ class AiAuditLogRepository {
       ]
     )
   }
+
+  async findRecentByUserId(userId, options = {}) {
+    const days = Number.isFinite(options.days) ? Math.max(1, Math.round(options.days)) : 7
+    const limit = Number.isFinite(options.limit) ? Math.max(1, Math.min(100, Math.round(options.limit))) : 20
+    const values = [userId, days]
+    const conditions = ['user_id = $1', "created_at >= NOW() - ($2::int * INTERVAL '1 day')"]
+
+    if (options.eventType) {
+      values.push(options.eventType)
+      conditions.push(`event_type = $${values.length}`)
+    }
+
+    values.push(limit)
+
+    const { rows } = await this.#pool.query(
+      `SELECT
+        id,
+        recommendation_id,
+        event_type,
+        provider,
+        status,
+        fallback_used,
+        latency_ms,
+        request_payload,
+        response_payload,
+        error_message,
+        created_at
+      FROM ai_audit_logs
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY created_at DESC
+      LIMIT $${values.length}`,
+      values
+    )
+
+    return rows
+  }
 }
 
 module.exports = AiAuditLogRepository

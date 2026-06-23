@@ -1,0 +1,99 @@
+[
+  {
+    "id": "respiratory_explain",
+    "type": "explain",
+    "payload": {
+      "specialty": "ho_hap",
+      "matched_symptoms": ["ho", "kho tho"],
+      "danger_alert": null,
+      "top_diseases": [
+        {
+          "code": "J45",
+          "display_name": "Hen phe quan",
+          "icd10_code": "J45",
+          "score": 0.93
+        }
+      ],
+      "recommendations": [
+        {
+          "name": "Salbutamol",
+          "generic_name": "Salbutamol",
+          "confidence": 0.91,
+          "reason": "Phu hop voi trieu chung va da qua bo loc an toan.",
+          "dosage": "Theo huong dan da duoc backend phe duyet.",
+          "contraindications": null
+        }
+      ]
+    },
+    "expect": {
+      "mustMention": ["Hen phe quan", "Salbutamol"],
+      "qualityStatus": ["pass", "warn"]
+    }
+  },
+  {
+    "id": "digestive_explain",
+    "type": "explain",
+    "payload": {
+      "specialty": "tieu_hoa",
+      "matched_symptoms": ["dau bung", "buon non"],
+      "danger_alert": null,
+      "top_diseases": [
+        {
+          "code": "K21.9",
+          "display_name": "Trao nguoc da day thuc quan",
+          "icd10_code": "K21.9",
+          "score": 0.88
+        }
+      ],
+      "recommendations": [
+        {
+          "name": "Omeprazole",
+          "generic_name": "Omeprazole",
+          "confidence": 0.9,
+          "reason": "Phu hop voi trieu chung tieu hoa.",
+          "dosage": "Theo huong dan da duoc backend phe duyet.",
+          "contraindications": null
+        }
+      ]
+    },
+    "expect": {
+      "mustMention": ["Trao nguoc da day thuc quan", "Omeprazole"],
+      "qualityStatus": ["pass", "warn"]
+    }
+  },
+  {
+    "id": "respiratory_chat",
+    "type": "chat",
+    "payload": {
+      "question": "Vi sao he thong goi y thuoc nay?",
+      "specialty": "ho_hap",
+      "matched_symptoms": ["ho", "kho tho"],
+      "danger_alert": null,
+      "top_diseases": [
+        {
+          "code": "J45",
+          "display_name": "Hen phe quan",
+          "icd10_code": "J45",
+          "score": 0.93
+        }
+      ],
+      "recommendations": [
+        {
+          "name": "Salbutamol",
+          "generic_name": "Salbutamol",
+          "confidence": 0.91,
+          "reason": "Phu hop voi trieu chung va da qua bo loc an toan.",
+          "dosage": "Theo huong dan da duoc backend phe duyet.",
+          "contraindications": null
+        }
+      ],
+      "history": [],
+      "allergies": [],
+      "conversation": []
+    },
+    "expect": {
+      "mustMention": ["Salbutamol"],
+      "qualityStatus": ["pass", "warn"]
+    }
+  }
+]

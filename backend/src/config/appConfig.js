@@ -41,7 +41,7 @@ const appConfig = {
   // AI configurations
   ai: {
     serviceUrl: process.env.AI_SERVICE_URL || '',
-    serviceTimeoutMs: Number(process.env.AI_SERVICE_TIMEOUT_MS) || 1500,
+    serviceTimeoutMs: Number(process.env.AI_SERVICE_TIMEOUT_MS) || 12000,
     explanationsEnabled: Boolean(process.env.AI_SERVICE_URL),
   },
 

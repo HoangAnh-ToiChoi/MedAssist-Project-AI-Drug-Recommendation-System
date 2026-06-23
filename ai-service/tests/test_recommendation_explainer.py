@@ -43,7 +43,8 @@ async def test_explainer_returns_provider_success_response():
     reset_provider_health_metrics()
     request = make_request()
     provider_payload = (
-        '{"summary":"Tom tat grounded.","explanation":"Giai thich chi dua tren du lieu da cho.",'
+        '{"summary":"Tom tat grounded ve Viem phe quan cap.",'
+        '"explanation":"Giai thich chi dua tren du lieu da cho va co nhac den Salbutamol.",'
         '"safety_note":"Thong tin chi mang tinh tham khao."}'
     )
 
@@ -54,9 +55,9 @@ async def test_explainer_returns_provider_success_response():
 
     assert response.success is True
     assert response.provider == "gemini"
-    assert response.summary == "Tom tat grounded."
-    assert response.explanation == "Giai thich chi dua tren du lieu da cho."
-    assert response.safety_note == "Thong tin chi mang tinh tham khao."
+    assert response.summary == "Tom tat grounded ve Viem phe quan cap."
+    assert response.explanation == "Giai thich chi dua tren du lieu da cho va co nhac den Salbutamol."
+    assert "Thong tin chi mang tinh tham khao." in response.safety_note
     assert response.error is None
     assert response.quality is not None
     assert response.quality.status in {"pass", "warn"}
@@ -67,7 +68,8 @@ async def test_explainer_falls_back_to_next_provider_when_first_is_invalid():
     request = make_request()
     invalid_payload = "This is not valid JSON"
     groq_payload = (
-        '{"summary":"Tom tat tu Groq.","explanation":"Giai thich tu provider thu hai.",'
+        '{"summary":"Tom tat tu Groq ve Viem phe quan cap.",'
+        '"explanation":"Giai thich tu provider thu hai va van giu Salbutamol trong pham vi grounded.",'
         '"safety_note":"Van can tham khao y kien chuyen mon."}'
     )
 
@@ -78,8 +80,8 @@ async def test_explainer_falls_back_to_next_provider_when_first_is_invalid():
 
     assert response.success is True
     assert response.provider == "groq"
-    assert response.summary == "Tom tat tu Groq."
-    assert response.explanation == "Giai thich tu provider thu hai."
+    assert response.summary == "Tom tat tu Groq ve Viem phe quan cap."
+    assert response.explanation == "Giai thich tu provider thu hai va van giu Salbutamol trong pham vi grounded."
     assert response.error is None
     assert response.quality is not None
 

@@ -108,6 +108,19 @@ Kỳ vọng:
 - `request_payload` / `response_payload` có dữ liệu
 - nếu provider lỗi thì `fallback_used = true`
 
+Chạy thêm local audit review report:
+
+```bash
+node scripts/report-ai-audit-log.js
+```
+
+Kỳ vọng:
+
+- thấy `fallback rate`
+- thấy breakdown theo `provider`
+- thấy `quality statuses`
+- thấy `top errors` để review nhanh trước demo hoặc trước release
+
 ## 7. Demo-safe fallback check
 
 - Tắt tạm provider key hoặc đổi `AI_SERVICE_URL` sai trong môi trường dev.

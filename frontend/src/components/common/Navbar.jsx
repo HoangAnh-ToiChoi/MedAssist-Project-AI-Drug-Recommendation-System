@@ -18,6 +18,7 @@ const Navbar = () => {
   }
 
   const user = getStoredUser()
+  const isAdmin = user?.role === 'admin'
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken')
@@ -31,6 +32,7 @@ const Navbar = () => {
     { to: '/symptoms', label: 'Kiểm tra triệu chứng' },
     { to: '/medical-history', label: 'Tiền sử bệnh lý' },
     { to: '/allergies', label: 'Dị ứng thuốc' },
+    ...(isAdmin ? [{ to: '/ai-insights', label: 'AI Insights' }] : []),
   ]
 
   const isActive = (path) => location.pathname === path

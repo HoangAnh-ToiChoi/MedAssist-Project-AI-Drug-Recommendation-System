@@ -10,6 +10,7 @@ import DrugSuggestion from './pages/DrugSuggestion';
 import MedicalHistory from './pages/MedicalHistory';
 import Allergies from './pages/Allergies';
 import DemoScenarios from './pages/DemoScenarios';
+import AiInsights from './pages/AiInsights';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           <Route path="/medical-history" element={<MedicalHistory />} />
           <Route path="/allergies" element={<Allergies />} />
           <Route path="/demo-scenarios" element={<DemoScenarios />} />
+          <Route path="/ai-insights" element={<AiInsights />} />
         </Routes>
       </BrowserRouter>
     </ToastProvider>

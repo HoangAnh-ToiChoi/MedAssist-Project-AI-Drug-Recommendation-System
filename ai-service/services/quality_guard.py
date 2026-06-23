@@ -52,7 +52,8 @@ def evaluate_grounded_response(
     score = 1.0
     if not disclaimer_present:
         score -= 0.45
-    if grounded_entity_total > 0 and grounded_entity_count == 0:
+    no_grounded_entity_reflected = grounded_entity_total > 0 and grounded_entity_count == 0
+    if no_grounded_entity_reflected:
         score -= 0.25
         notes.append("no_grounded_entity_reflected")
     if danger_alert and not danger_alert_considered:
@@ -60,7 +61,7 @@ def evaluate_grounded_response(
     score = max(0.0, round(score, 2))
 
     status = "pass"
-    if not disclaimer_present:
+    if not disclaimer_present or no_grounded_entity_reflected:
         status = "fail"
     elif score < 0.7:
         status = "warn"

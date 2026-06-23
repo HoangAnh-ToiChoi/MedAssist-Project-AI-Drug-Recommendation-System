@@ -45,7 +45,7 @@ def make_request():
 async def test_grounded_chat_returns_provider_answer_when_json_is_valid():
     reset_provider_health_metrics()
     request = make_request()
-    provider_payload = '{"answer":"Thuoc nay duoc giu lai vi phu hop voi trieu chung va da qua bo loc an toan.","safety_note":"Thong tin chi de tham khao, neu kho tho nang len can di kham."}'
+    provider_payload = '{"answer":"Paracetamol 500mg duoc giu lai vi phu hop voi trieu chung va co lien quan den Viem phe quan cap.","safety_note":"Thong tin chi de tham khao, neu kho tho nang len can di kham."}'
 
     with patch(
         "services.grounded_chatbot.chat_with_fallback",

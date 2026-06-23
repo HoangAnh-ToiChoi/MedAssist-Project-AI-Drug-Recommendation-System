@@ -14,6 +14,7 @@ const client = createClient({
 })
 
 let connected = false
+const memoryStore = new Map()
 
 client.on('connect', () => {
   connected = true
@@ -33,4 +34,49 @@ client.on('error', (err) => {
 
 client.connect().catch(() => {})
 
-module.exports = client
+const setMemoryValue = (key, value, ttlSeconds) => {
+  const expiresAt = Number.isFinite(ttlSeconds) ? Date.now() + (ttlSeconds * 1000) : null
+  memoryStore.set(key, { value, expiresAt })
+}
+
+const getMemoryValue = (key) => {
+  const entry = memoryStore.get(key)
+  if (!entry) return null
+  if (entry.expiresAt && entry.expiresAt <= Date.now()) {
+    memoryStore.delete(key)
+    return null
+  }
+  return entry.value
+}
+
+const fallbackClient = {
+  async get(key) {
+    if (connected) return client.get(key)
+    return getMemoryValue(key)
+  },
+  async setEx(key, ttlSeconds, value) {
+    if (connected) return client.setEx(key, ttlSeconds, value)
+    setMemoryValue(key, value, ttlSeconds)
+    return 'OK'
+  },
+  async del(...keys) {
+    if (connected) return client.del(...keys)
+    let deleted = 0
+    keys.flat().forEach((key) => {
+      if (memoryStore.delete(key)) deleted += 1
+    })
+    return deleted
+  },
+  async ping() {
+    if (connected) return client.ping()
+    return 'MEMORY_FALLBACK'
+  },
+  get isMemoryFallback() {
+    return !connected
+  },
+  on(...args) {
+    return client.on(...args)
+  },
+}
+
+module.exports = fallbackClient

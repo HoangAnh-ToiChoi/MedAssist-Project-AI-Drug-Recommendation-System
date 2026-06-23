@@ -14,9 +14,25 @@ from services.provider_router import (
 
 logger = logging.getLogger("recommendation_explainer")
 
+DEFAULT_DISCLAIMER = (
+    "Thong tin chi mang tinh tham khao va khong thay the bac si hoac co so y te. "
+    "Khong tu y them thuoc, doi thuoc, hoac bo qua canh bao an toan."
+)
+
 
 def _trim_text(value: Optional[str]) -> str:
     return (value or "").strip()
+
+
+def _ensure_disclaimer(value: Optional[str]) -> str:
+    text = _trim_text(value)
+    normalized = text.lower()
+    markers = ["tham khao", "bac si", "co so y te", "khong thay the", "khong tu y"]
+    if any(marker in normalized for marker in markers):
+        return text
+    if not text:
+        return DEFAULT_DISCLAIMER
+    return f"{text} {DEFAULT_DISCLAIMER}"
 
 
 def _build_fallback_response(error: Optional[str], request: RecommendationExplainRequest) -> RecommendationExplainResponse:
@@ -41,7 +57,7 @@ def _build_fallback_response(error: Optional[str], request: RecommendationExplai
     if request.recommendations:
         explanation_parts.append("Cac goi y thuoc can duoc doi chieu voi di ung, chong chi dinh, va huong dan chuyen mon truoc khi su dung.")
 
-    safety_note = (
+    safety_note = _ensure_disclaimer(
         "Thong tin chi mang tinh tham khao. Khong tu y them thuoc, doi thuoc, hoac bo qua canh bao an toan tu backend. "
         "Neu trieu chung nang len hoac co dau hieu nguy hiem, can lien he bac si hoac co so y te."
     )
@@ -143,7 +159,7 @@ def _extract_json_object(content: str) -> Optional[Dict[str, str]]:
 
     summary = _trim_text(parsed.get("summary"))
     explanation = _trim_text(parsed.get("explanation"))
-    safety_note = _trim_text(parsed.get("safety_note"))
+    safety_note = _ensure_disclaimer(parsed.get("safety_note"))
     if not summary or not explanation or not safety_note:
         return None
 

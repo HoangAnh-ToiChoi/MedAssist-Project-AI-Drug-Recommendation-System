@@ -155,24 +155,34 @@ class RecommendationRepository {
       }
     }
 
-    const topDiseases = await this.#diseaseGraphRepository.findDiseaseCandidatesBySymptomCodes(
-      specialty,
-      symptomCodes
-    )
-    const matchedSymptomCount = Array.isArray(symptomCodes) ? symptomCodes.length : 0
-    const rankedRecommendations = await this.#diseaseGraphRepository.findDrugCandidatesByDiseaseIds(
-      topDiseases.map((item) => item.id)
-    )
-    const recommendations = rankedRecommendations.map((item) => ({
-      ...item,
-      reason: item.reason || buildRecommendationReason(matchedSymptomCount),
-      dosage: item.dosage || DEFAULT_DOSAGE_GUIDANCE,
-    }))
+    try {
+      const topDiseases = await this.#diseaseGraphRepository.findDiseaseCandidatesBySymptomCodes(
+        specialty,
+        symptomCodes
+      )
+      const matchedSymptomCount = Array.isArray(symptomCodes) ? symptomCodes.length : 0
+      const rankedRecommendations = await this.#diseaseGraphRepository.findDrugCandidatesByDiseaseIds(
+        topDiseases.map((item) => item.id)
+      )
+      const recommendations = rankedRecommendations.map((item) => ({
+        ...item,
+        reason: item.reason || buildRecommendationReason(matchedSymptomCount),
+        dosage: item.dosage || DEFAULT_DOSAGE_GUIDANCE,
+      }))
+
+      if (topDiseases.length > 0 || recommendations.length > 0) {
+        return {
+          matchedSymptoms: symptomCodes,
+          topDiseases,
+          recommendations,
+        }
+      }
+    } catch {}
 
     return {
       matchedSymptoms: symptomCodes,
-      topDiseases,
-      recommendations,
+      topDiseases: [],
+      recommendations: await this.findRecommendedDrugsBySymptomCodes(symptomCodes),
     }
   }
 }
