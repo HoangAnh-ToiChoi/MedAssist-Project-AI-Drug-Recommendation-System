@@ -92,7 +92,9 @@ class AuthService {
     const normalizedEmail = this.#normalizeEmail(email)
     await this.#assertLoginNotLocked(normalizedEmail)
 
+    console.log(`[DEBUG_LOGIN] email: "${email}", normalized: "${normalizedEmail}", passwordLength: ${password ? password.length : 0}`)
     const user = await this.#userRepo.findByEmail(normalizedEmail)
+    console.log(`[DEBUG_LOGIN] user found in DB: ${!!user}`)
     if (!user) {
       // OWASP V2.7: Không phân biệt "email không tồn tại" vs "chưa xác thực OTP"
       // Cả hai trường hợp đều bị xử lý như thông tin xác thực sai → 401 generic
@@ -100,6 +102,7 @@ class AuthService {
     }
 
     const valid = await user.verifyPassword(password, bcrypt)
+    console.log(`[DEBUG_LOGIN] password valid: ${valid}`)
     if (!valid) {
       await this.#handleFailedLogin(normalizedEmail)
     }
