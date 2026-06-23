@@ -3,11 +3,13 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from services.provider_router import get_provider_health_snapshot
 
 # Load env variables from .env if present
 load_dotenv()
 
 from routers.chat import router as chat_router
+from routers.grounded_chat import router as grounded_chat_router
 from routers.recommendation import router as recommendation_router
 
 app = FastAPI(
@@ -27,11 +29,16 @@ app.add_middleware(
 
 # Include routers
 app.include_router(chat_router)
+app.include_router(grounded_chat_router)
 app.include_router(recommendation_router)
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "ai-service"}
+    return {
+        "status": "ok",
+        "service": "ai-service",
+        "provider_health": get_provider_health_snapshot(),
+    }
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))

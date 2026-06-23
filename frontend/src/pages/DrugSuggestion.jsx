@@ -4,6 +4,7 @@ import Navbar from '../components/common/Navbar';
 import RecommendationCard from '../components/symptoms/RecommendationCard';
 import DiseaseCandidateCard from '../components/symptoms/DiseaseCandidateCard';
 import RecommendationExplanationCard from '../components/symptoms/RecommendationExplanationCard';
+import RecommendationChatCard from '../components/symptoms/RecommendationChatCard';
 import MedicalAlert from '../components/common/MedicalAlert';
 import EmptyState from '../components/common/EmptyState';
 import PageHeader from '../components/common/PageHeader';
@@ -198,6 +199,15 @@ const DrugSuggestion = () => {
             {llmExplanation && (
               <RecommendationExplanationCard explanation={llmExplanation} />
             )}
+            <RecommendationChatCard
+              recommendationId={meta?.recommendationId || localStorage.getItem('lastRecommendationId') || JSON.parse(localStorage.getItem('drugSuggestions') || '{}')?.id || null}
+              specialty={meta?.specialty || null}
+              matchedSymptoms={matchedSymptoms}
+              topDiseases={topDiseases}
+              recommendations={recommendations}
+              dangerAlert={dangerAlert}
+              llmExplanation={llmExplanation}
+            />
           </div>
         )}
       </div>

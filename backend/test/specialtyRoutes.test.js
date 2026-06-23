@@ -72,7 +72,10 @@ class StringSchema {
   constructor() {
     this._trim = false
     this._min = null
+    this._max = null
     this._required = false
+    this._valid = null
+    this._allow = new Set()
     this._messages = {}
   }
 
@@ -86,8 +89,28 @@ class StringSchema {
     return this
   }
 
+  max(value) {
+    this._max = value
+    return this
+  }
+
   required() {
     this._required = true
+    return this
+  }
+
+  optional() {
+    this._required = false
+    return this
+  }
+
+  allow(...values) {
+    values.forEach((value) => this._allow.add(value))
+    return this
+  }
+
+  valid(...values) {
+    this._valid = new Set(values)
     return this
   }
 
@@ -104,6 +127,10 @@ class StringSchema {
         }
       }
 
+      return { value }
+    }
+
+    if (this._allow.has(value)) {
       return { value }
     }
 
@@ -135,7 +162,85 @@ class StringSchema {
       }
     }
 
+    if (this._max !== null && normalized.length > this._max) {
+      return {
+        error: buildValidationError(this._messages['string.max'] || 'Value is too long'),
+      }
+    }
+
+    if (this._valid && !this._valid.has(normalized)) {
+      return {
+        error: buildValidationError(this._messages['any.only'] || 'Value is invalid'),
+      }
+    }
+
     return { value: normalized }
+  }
+}
+
+class NumberSchema {
+  constructor() {
+    this._min = null
+    this._max = null
+    this._required = false
+    this._messages = {}
+  }
+
+  min(value) {
+    this._min = value
+    return this
+  }
+
+  max(value) {
+    this._max = value
+    return this
+  }
+
+  required() {
+    this._required = true
+    return this
+  }
+
+  optional() {
+    this._required = false
+    return this
+  }
+
+  messages(messages) {
+    this._messages = { ...this._messages, ...messages }
+    return this
+  }
+
+  validate(value) {
+    if (value === undefined || value === null) {
+      if (this._required) {
+        return {
+          error: buildValidationError(this._messages['any.required'] || 'Value is required'),
+        }
+      }
+
+      return { value }
+    }
+
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return {
+        error: buildValidationError(this._messages['number.base'] || 'Value must be a number'),
+      }
+    }
+
+    if (this._min !== null && value < this._min) {
+      return {
+        error: buildValidationError(this._messages['number.min'] || 'Value is too small'),
+      }
+    }
+
+    if (this._max !== null && value > this._max) {
+      return {
+        error: buildValidationError(this._messages['number.max'] || 'Value is too large'),
+      }
+    }
+
+    return { value }
   }
 }
 
@@ -159,6 +264,11 @@ class ArraySchema {
 
   required() {
     this._required = true
+    return this
+  }
+
+  optional() {
+    this._required = false
     return this
   }
 
@@ -213,9 +323,30 @@ class ArraySchema {
 class ObjectSchema {
   constructor(shape) {
     this._shape = shape
+    this._required = false
+    this._messages = {}
+  }
+
+  required() {
+    this._required = true
+    return this
+  }
+
+  optional() {
+    this._required = false
+    return this
+  }
+
+  messages(messages) {
+    this._messages = { ...this._messages, ...messages }
+    return this
   }
 
   validate(value, options = {}) {
+    if ((value === undefined || value === null) && !this._required) {
+      return { value }
+    }
+
     const source = value && typeof value === 'object' ? value : {}
     const normalized = options.stripUnknown ? {} : { ...source }
     const details = []
@@ -243,6 +374,9 @@ const joiMock = {
   },
   string() {
     return new StringSchema()
+  },
+  number() {
+    return new NumberSchema()
   },
   array() {
     return new ArraySchema()
@@ -601,6 +735,18 @@ const recommendationControllerMock = {
   },
 }
 
+const chatbotControllerMock = {
+  chatOnRecommendation(req, res) {
+    res.json({
+      success: true,
+      message: 'Chatbot grounded trả lời thành công',
+      data: {
+        question: req.body.question,
+      },
+    })
+  },
+}
+
 const authMiddlewareMock = (req, res, next) => {
   const header = req.headers.authorization
 
@@ -622,6 +768,7 @@ const containerMock = {
     if (name === 'specialtyController') return specialtyControllerMock
     if (name === 'symptomController') return symptomControllerMock
     if (name === 'recommendationController') return recommendationControllerMock
+    if (name === 'chatbotController') return chatbotControllerMock
     throw new Error(`Unexpected container resolve: ${name}`)
   },
 }

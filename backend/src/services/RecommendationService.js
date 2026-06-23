@@ -15,8 +15,9 @@ class RecommendationService {
   #recommendationRepo
   #redis
   #aiEngines
+  #aiAuditLogService
 
-  constructor(patientHistoryRepo, allergyRepository, recommendationRepo, redis, aiEngines) {
+  constructor(patientHistoryRepo, allergyRepository, recommendationRepo, redis, aiEngines, aiAuditLogService) {
     if (arguments.length === 1 && typeof arguments[0] === 'object' && arguments[0] !== null) {
       const deps = arguments[0]
       this.#patientHistoryRepo = deps.patientHistoryRepo
@@ -24,12 +25,14 @@ class RecommendationService {
       this.#recommendationRepo = deps.recommendationRepo
       this.#redis = deps.redis || deps.redisClient
       this.#aiEngines = deps.aiEngines
+      this.#aiAuditLogService = deps.aiAuditLogService
     } else {
       this.#patientHistoryRepo = patientHistoryRepo
       this.#allergyRepository = allergyRepository
       this.#recommendationRepo = recommendationRepo
       this.#redis = redis
       this.#aiEngines = aiEngines
+      this.#aiAuditLogService = aiAuditLogService
     }
 
     if (!this.#aiEngines) {
@@ -103,6 +106,8 @@ class RecommendationService {
     }
 
     result.llmExplanation = await this.#buildGroundedExplanation({
+      userId,
+      recommendationId: saved.id,
       specialty: result.specialty,
       inputSymptoms: normalizedSymptoms,
       matchedSymptoms: result.matchedSymptoms,
@@ -288,40 +293,53 @@ class RecommendationService {
   }
 
   async #buildGroundedExplanation(payload) {
+    const start = Date.now()
     const explainEngine = this.#aiEngines.find(
       (engine) => typeof engine?.explainGroundedRecommendation === 'function'
     )
 
     if (!explainEngine) {
-      return this.#buildFallbackExplanation(payload, {
+      const fallbackExplanation = this.#buildFallbackExplanation(payload, {
         enabled: false,
         status: 'disabled',
         provider: null,
       })
+      await this.#recordAuditLog(payload, fallbackExplanation, Date.now() - start)
+      return fallbackExplanation
     }
 
     try {
       const explanation = await explainEngine.explainGroundedRecommendation(payload)
       if (!explanation) {
-        return this.#buildFallbackExplanation(payload, {
+        const fallbackExplanation = this.#buildFallbackExplanation(payload, {
           enabled: false,
           status: 'disabled',
           provider: null,
         })
+        await this.#recordAuditLog(payload, fallbackExplanation, Date.now() - start)
+        return fallbackExplanation
       }
 
-      return this.#normalizeLlmExplanation(explanation, payload, this.#resolveExplanationProvider(explainEngine))
+      const normalizedExplanation = this.#normalizeLlmExplanation(
+        explanation,
+        payload,
+        this.#resolveExplanationProvider(explainEngine)
+      )
+      await this.#recordAuditLog(payload, normalizedExplanation, Date.now() - start)
+      return normalizedExplanation
     } catch (err) {
       logger.warn(
         `[AI Explanation Warning] Engine ${explainEngine.constructor.name} failed: ${err.message}. Using deterministic fallback explanation.`
       )
 
-      return this.#buildFallbackExplanation(payload, {
+      const fallbackExplanation = this.#buildFallbackExplanation(payload, {
         enabled: true,
         status: 'fallback',
         provider: this.#resolveExplanationProvider(explainEngine),
         error: err.message,
       })
+      await this.#recordAuditLog(payload, fallbackExplanation, Date.now() - start)
+      return fallbackExplanation
     }
   }
 
@@ -342,6 +360,7 @@ class RecommendationService {
       summary: String(explanation.summary || '').trim() || this.#buildFallbackSummary(payload),
       explanation: String(explanation.explanation || '').trim() || this.#buildFallbackNarrative(payload),
       safetyNote: String(explanation.safetyNote || '').trim() || this.#buildSafetyNote(payload),
+      ...(explanation.quality ? { quality: explanation.quality } : {}),
       ...(explanation.error ? { error: String(explanation.error) } : {}),
     }
   }
@@ -404,6 +423,43 @@ class RecommendationService {
     }
 
     return engine.constructor?.name || 'unknown'
+  }
+
+  async #recordAuditLog(payload, explanation, latencyMs) {
+    if (!this.#aiAuditLogService) {
+      return
+    }
+
+    try {
+      await this.#aiAuditLogService.record({
+        userId: payload.userId,
+        recommendationId: payload.recommendationId || null,
+        eventType: 'recommendation_explanation',
+        provider: explanation?.provider || null,
+        status: explanation?.status || 'unknown',
+        fallbackUsed: explanation?.status !== 'success',
+        latencyMs,
+        requestPayload: this.#buildAuditRequestPayload(payload),
+        responsePayload: explanation,
+        errorMessage: explanation?.error || null,
+      })
+    } catch (err) {
+      logger.warn(`[AI Audit Warning] Failed to record recommendation_explanation audit log: ${err.message}`)
+    }
+  }
+
+  #buildAuditRequestPayload(payload) {
+    return {
+      specialty: payload.specialty,
+      inputSymptoms: Array.isArray(payload.inputSymptoms) ? payload.inputSymptoms : [],
+      matchedSymptoms: Array.isArray(payload.matchedSymptoms) ? payload.matchedSymptoms : [],
+      topDiseases: Array.isArray(payload.topDiseases) ? payload.topDiseases : [],
+      recommendations: Array.isArray(payload.recommendations) ? payload.recommendations : [],
+      history: Array.isArray(payload.history) ? payload.history : [],
+      allergies: Array.isArray(payload.allergies) ? payload.allergies : [],
+      dangerAlert: payload.dangerAlert || null,
+      engineVersion: payload.engineVersion || null,
+    }
   }
 }
 

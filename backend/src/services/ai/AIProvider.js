@@ -28,10 +28,27 @@ class AIProvider {
    *   summary?: string,
    *   explanation?: string,
    *   safetyNote?: string,
-   *   error?: string
+   *   error?: string,
+   *   quality?: object
    * }>}
    */
   async explainGroundedRecommendation(payload) {
+    void payload
+    return null
+  }
+
+  /**
+   * @param {object} payload
+   * @returns {Promise<{
+   *   success?: boolean,
+   *   provider?: string|null,
+   *   answer?: string,
+   *   safetyNote?: string,
+   *   error?: string,
+   *   quality?: object
+   * }>}
+   */
+  async chatGroundedRecommendation(payload) {
     void payload
     return null
   }

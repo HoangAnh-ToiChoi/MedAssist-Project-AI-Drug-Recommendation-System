@@ -82,6 +82,7 @@ const SymptomInput = () => {
       localStorage.setItem('drugSuggestions', JSON.stringify({
         ...(response.data.data || response.data),
         meta: {
+          recommendationId: (response.data.data || response.data)?.id || null,
           specialty,
           symptoms: selectedSymptoms,
           severity,
@@ -90,6 +91,7 @@ const SymptomInput = () => {
           historyCount
         }
       }));
+      localStorage.setItem('lastRecommendationId', (response.data.data || response.data)?.id || '');
       navigate('/suggestions');
     } catch (err) {
       console.error(err);
@@ -122,6 +124,15 @@ const SymptomInput = () => {
           <p className="text-sm text-slate-400 leading-relaxed">
             Chọn triệu chứng của bạn để nhận đề xuất hỗ trợ ban đầu và danh mục gợi ý thuốc tham khảo an toàn từ trợ lý AI.
           </p>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => navigate('/demo-scenarios')}
+              className="rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              Mở kịch bản demo quay video
+            </button>
+          </div>
         </div>
 
         {/* Dynamic Warning Alert */}

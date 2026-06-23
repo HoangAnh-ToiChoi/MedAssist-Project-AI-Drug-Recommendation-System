@@ -8,6 +8,7 @@ import pytest
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.chatbot import try_gemini, try_groq, try_zhipu, chat_with_fallback
+from services.provider_router import reset_provider_health_metrics
 
 load_dotenv()
 
@@ -20,6 +21,7 @@ pytestmark = [
 ]
 
 async def test_live_apis():
+    reset_provider_health_metrics()
     print("=== LIVE CHATBOT API KEYS VERIFICATION ===")
     
     # Check loaded keys

@@ -1,9 +1,16 @@
 import json
 import logging
+import time
 from typing import Dict, List, Optional, Tuple
 
-from models.schemas import RecommendationExplainRequest, RecommendationExplainResponse
+from models.schemas import QualityCheck, RecommendationExplainRequest, RecommendationExplainResponse
+from services.quality_guard import evaluate_grounded_response
 from services.chatbot import try_gemini, try_groq, try_zhipu
+from services.provider_router import (
+    get_provider_health_snapshot,
+    order_providers,
+    record_provider_result,
+)
 
 logger = logging.getLogger("recommendation_explainer")
 
@@ -39,6 +46,13 @@ def _build_fallback_response(error: Optional[str], request: RecommendationExplai
         "Neu trieu chung nang len hoac co dau hieu nguy hiem, can lien he bac si hoac co so y te."
     )
 
+    quality = QualityCheck(**evaluate_grounded_response(
+        main_text=" ".join(summary_parts + explanation_parts),
+        safety_note=safety_note,
+        danger_alert=request.danger_alert,
+        grounded_entities=_collect_grounded_entities(request),
+    ))
+
     return RecommendationExplainResponse(
         success=False,
         provider="none",
@@ -46,7 +60,19 @@ def _build_fallback_response(error: Optional[str], request: RecommendationExplai
         explanation=" ".join(explanation_parts),
         safety_note=safety_note,
         error=error,
+        quality=quality,
     )
+
+
+def _collect_grounded_entities(request: RecommendationExplainRequest) -> List[str]:
+    diseases = [d.display_name for d in request.top_diseases if _trim_text(d.display_name)]
+    drugs = []
+    for recommendation in request.recommendations:
+        if _trim_text(recommendation.name):
+            drugs.append(recommendation.name)
+        if _trim_text(recommendation.generic_name):
+            drugs.append(recommendation.generic_name)
+    return diseases + drugs
 
 
 def _build_messages(request: RecommendationExplainRequest) -> List[Dict[str, str]]:
@@ -168,12 +194,60 @@ async def explain_recommendation_with_fallback(
     ]
 
     errors: List[str] = []
-    for provider_name, provider_func in provider_chain:
-        response, error = await _try_provider(provider_name, provider_func, messages)
-        if response:
-            return response
-        if error:
-            errors.append(error)
+    for provider_name, provider_func in order_providers(provider_chain):
+        provider_state = get_provider_health_snapshot().get(provider_name, {})
+        if provider_state.get("breaker_state") == "open":
+            errors.append(f"{provider_name} skipped because circuit breaker is open")
+            continue
+
+        started = time.perf_counter()
+        try:
+            content = await provider_func(messages, 0.2)
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - started) * 1000
+            error_message = f"{provider_name} provider raised an exception: {str(exc)}"
+            record_provider_result(provider_name, False, latency_ms, error_message)
+            logger.error(error_message)
+            errors.append(error_message)
+            continue
+
+        latency_ms = (time.perf_counter() - started) * 1000
+        if not content:
+            error_message = f"{provider_name} provider returned no content"
+            record_provider_result(provider_name, False, latency_ms, error_message)
+            errors.append(error_message)
+            continue
+
+        parsed = _extract_json_object(content)
+        if parsed:
+            quality = QualityCheck(**evaluate_grounded_response(
+                main_text=f'{parsed["summary"]} {parsed["explanation"]}',
+                safety_note=parsed["safety_note"],
+                danger_alert=request.danger_alert,
+                grounded_entities=_collect_grounded_entities(request),
+            ))
+            if quality.status == "fail":
+                quality_error = f"{provider_name} provider failed grounded quality guard"
+                record_provider_result(provider_name, False, latency_ms, quality_error)
+                logger.error(quality_error)
+                errors.append(quality_error)
+                continue
+
+            record_provider_result(provider_name, True, latency_ms, None)
+            return RecommendationExplainResponse(
+                success=True,
+                provider=provider_name,
+                summary=parsed["summary"],
+                explanation=parsed["explanation"],
+                safety_note=parsed["safety_note"],
+                error=None,
+                quality=quality,
+            )
+
+        invalid_error = f"{provider_name} provider returned invalid structured explanation content"
+        record_provider_result(provider_name, False, latency_ms, invalid_error)
+        logger.error(invalid_error)
+        errors.append(invalid_error)
 
     error_message = (
         "All AI recommendation explanation providers (Gemini, Groq, Zhipu) failed or returned invalid structured output. "

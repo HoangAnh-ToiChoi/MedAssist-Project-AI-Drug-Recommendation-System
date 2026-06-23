@@ -2,6 +2,7 @@ import os
 import logging
 import httpx
 from typing import List, Dict, Tuple, Optional
+from services.provider_router import call_with_provider_router
 
 logger = logging.getLogger("chatbot")
 
@@ -152,23 +153,23 @@ async def chat_with_fallback(messages: List[Dict[str, str]], temperature: float 
     Returns:
         Tuple[success (bool), content (str), provider (str), error_message (str|None)]
     """
-    # 1. Try Gemini Flash
-    content = await try_gemini(messages, temperature)
-    if content:
-        return True, content, "gemini", None
-    
-    # 2. Try Groq (Llama)
-    content = await try_groq(messages, temperature)
-    if content:
-        return True, content, "groq", None
+    provider_chain = [
+        ("gemini", try_gemini),
+        ("groq", try_groq),
+        ("zhipu", try_zhipu),
+    ]
 
-    # 3. Try Zhipu AI (GLM)
-    content = await try_zhipu(messages, temperature)
-    if content:
-        return True, content, "zhipu", None
+    provider, content, errors = await call_with_provider_router(
+        provider_chain,
+        lambda _provider_name, provider_func: provider_func(messages, temperature),
+    )
 
-    # 4. All providers failed
+    if content and provider:
+        return True, content, provider, None
+
     err_msg = "All AI chatbot providers (Gemini, Groq, Zhipu) failed or keys are missing."
+    if errors:
+        err_msg = f"{err_msg} {' | '.join(errors)}"
     logger.error(err_msg)
     
     friendly_fallback = (

@@ -196,7 +196,30 @@ CREATE INDEX idx_recommendations_user_id    ON recommendations(user_id);
 CREATE INDEX idx_recommendations_created_at ON recommendations(created_at DESC);
 
 -- ============================================================
--- 8. REFRESH_TOKENS
+-- 8. AI_AUDIT_LOGS
+-- ============================================================
+CREATE TABLE ai_audit_logs (
+  id                UUID         DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id           UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recommendation_id UUID         REFERENCES recommendations(id) ON DELETE SET NULL,
+  event_type        VARCHAR(50)  NOT NULL,
+  provider          VARCHAR(100),
+  status            VARCHAR(30)  NOT NULL,
+  fallback_used     BOOLEAN      NOT NULL DEFAULT false,
+  latency_ms        INTEGER      CHECK (latency_ms IS NULL OR latency_ms >= 0),
+  request_payload   JSONB        NOT NULL DEFAULT '{}'::jsonb,
+  response_payload  JSONB        NOT NULL DEFAULT '{}'::jsonb,
+  error_message     TEXT,
+  created_at        TIMESTAMP    DEFAULT NOW()
+);
+
+CREATE INDEX idx_ai_audit_logs_user_id ON ai_audit_logs(user_id);
+CREATE INDEX idx_ai_audit_logs_recommendation_id ON ai_audit_logs(recommendation_id);
+CREATE INDEX idx_ai_audit_logs_event_type_created_at ON ai_audit_logs(event_type, created_at DESC);
+CREATE INDEX idx_ai_audit_logs_status_created_at ON ai_audit_logs(status, created_at DESC);
+
+-- ============================================================
+-- 9. REFRESH_TOKENS
 -- ============================================================
 CREATE TABLE refresh_tokens (
   id          UUID         DEFAULT gen_random_uuid() PRIMARY KEY,

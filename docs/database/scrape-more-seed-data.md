@@ -83,10 +83,16 @@ Script:
 npm run seed:disease-graph
 ```
 
+Production-ready review run without synthetic padding:
+
+```bash
+node scripts/seed-disease-graph-data.js --strict --min-diseases=1000 --min-drugs=1000
+```
+
 Small verification run:
 
 ```bash
-npm run seed:disease-graph -- --min-diseases=5 --min-drugs=5 --output-dir=/tmp/medassist-disease-graph-check
+node scripts/seed-disease-graph-data.js --offline --min-diseases=5 --min-drugs=5 --output-dir=/tmp/medassist-disease-graph-check
 ```
 
 Default output:
@@ -103,4 +109,27 @@ data/crawled/disease-graph/scrape_report.json
 
 `disease_types.csv` and `import.sql` seed the approved 24 specialty taxonomy. The disease, drug, disease-symptom, and disease-drug CSV files are review artifacts: curate them, resolve UUIDs against `disease_types`, `symptoms`, and `drugs`, then import only approved rows.
 
-The script makes best-effort offline seed/sync calls to public sources such as Clinical Tables, RxTerms, RxNorm, and openFDA, then falls back to deterministic review candidates when network access is unavailable. These public APIs must not be used as runtime dependencies for user-facing medical recommendations.
+## Disease graph import guardrails
+
+- `--strict` disables synthetic padding. If the requested minimum counts cannot be met from public-source rows plus local curated seeds, the script writes the report/artifacts and then exits non-zero.
+- `--offline` disables all live API calls. This is intended for local smoke checks and CI guardrails, not for production-ready coverage runs.
+- `source_primary=local_synthetic_review` means the row exists only to pad review coverage in non-strict mode. Do not promote these rows into production datasets.
+- `scrape_report.json` is the canonical gate before import. Review:
+  - `counts`: raw row totals for disease, drug, symptom, and mapping artifacts.
+  - `source_coverage.diseases` / `source_coverage.drugs`: row counts by source, public-source totals, local curated seed totals, and synthetic totals.
+  - `strict_status`: whether strict mode was enabled, whether minimums were met, and whether any synthetic padding slipped in.
+  - `warnings`: source outages, offline skips, below-threshold counts, or synthetic padding notices.
+
+## Recommended disease graph import flow
+
+1. Run a production-intent pass with `--strict` when you want production-ready review artifacts.
+2. Open `scrape_report.json` first and confirm:
+   - `strict_status.passed` is `true`;
+   - `source_coverage.diseases.synthetic_rows` is `0`;
+   - `source_coverage.drugs.synthetic_rows` is `0`;
+   - warnings do not indicate unacceptable source gaps.
+3. Review `diseases_review.csv` and `drugs_review.csv`, especially rows sourced from public APIs, for duplicates and clinical quality.
+4. Resolve reviewed disease rows against `disease_types`, then resolve drug rows against `drugs`.
+5. Import only curated rows and only after UUID resolution for `disease_symptoms` / `disease_drugs`.
+
+The script makes best-effort seed/sync calls to public sources such as Clinical Tables, RxTerms, RxNorm, and openFDA when network access is allowed. These public APIs must not be used as runtime dependencies for user-facing medical recommendations.

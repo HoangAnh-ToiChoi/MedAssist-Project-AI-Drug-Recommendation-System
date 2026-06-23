@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import DrugSuggestion from './pages/DrugSuggestion';
 import MedicalHistory from './pages/MedicalHistory';
 import Allergies from './pages/Allergies';
+import DemoScenarios from './pages/DemoScenarios';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/suggestions" element={<DrugSuggestion />} />
           <Route path="/medical-history" element={<MedicalHistory />} />
           <Route path="/allergies" element={<Allergies />} />
+          <Route path="/demo-scenarios" element={<DemoScenarios />} />
         </Routes>
       </BrowserRouter>
     </ToastProvider>

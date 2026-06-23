@@ -36,6 +36,18 @@ class RecommendationRepository {
     return recommendation
   }
 
+  async findByIdForUser(id, userId) {
+    const { rows } = await this.#pool.query(
+      `SELECT id, user_id, input_symptoms, output_drugs, ai_version, danger_alert, created_at
+       FROM recommendations
+       WHERE id = $1 AND user_id = $2
+       LIMIT 1`,
+      [id, userId]
+    )
+
+    return Recommendation.fromRow(rows[0] || null)
+  }
+
   async resolveSymptomCodes(inputs) {
     if (!inputs || inputs.length === 0) return []
 

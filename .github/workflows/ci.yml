@@ -11,6 +11,36 @@ on:
       - main
 
 jobs:
+  data_pipeline:
+    name: Data Pipeline Guardrails
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Check disease graph scripts syntax
+        run: |
+          node --check scripts/seed-disease-graph-data.js
+          node --check scripts/check-disease-graph-pipeline.js
+          node --check scripts/check-ai-observability.js
+
+      - name: Run offline disease graph guardrail check
+        run: node scripts/check-disease-graph-pipeline.js
+
+      - name: Run AI observability guardrail check
+        run: node scripts/check-ai-observability.js
+
   backend:
     name: Backend Tests
     runs-on: ubuntu-latest

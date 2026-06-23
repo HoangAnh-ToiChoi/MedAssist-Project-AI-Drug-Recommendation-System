@@ -16,6 +16,11 @@ class ChatResponse(BaseModel):
     error: Optional[str] = Field(None, description="Detailed error message if the call failed")
 
 
+class GroundedChatTurn(BaseModel):
+    role: str = Field(..., description="Conversation role: 'user' or 'assistant'")
+    content: str = Field(..., description="Turn content")
+
+
 class GroundedDisease(BaseModel):
     code: str = Field(..., description="Stable disease code from backend")
     display_name: str = Field(..., description="Human-readable disease name")
@@ -47,6 +52,16 @@ class GroundingRules(BaseModel):
     )
 
 
+class QualityCheck(BaseModel):
+    status: str = Field(..., description="Heuristic quality result: pass, warn, or fail")
+    score: float = Field(..., description="Heuristic grounded quality score between 0 and 1")
+    grounded_entity_count: int = Field(..., description="How many grounded entities were reflected in the response")
+    grounded_entity_total: int = Field(..., description="How many grounded entities were available for reflection")
+    disclaimer_present: bool = Field(..., description="Whether the response preserved a medical disclaimer")
+    danger_alert_considered: bool = Field(..., description="Whether the response reflected the current danger alert when present")
+    notes: List[str] = Field(default_factory=list, description="Heuristic notes explaining warnings or failures")
+
+
 class RecommendationExplainRequest(BaseModel):
     specialty: str = Field(..., description="Grounded specialty code")
     matched_symptoms: List[str] = Field(..., description="Grounded matched symptom codes or labels")
@@ -72,3 +87,35 @@ class RecommendationExplainResponse(BaseModel):
     explanation: str = Field(..., description="Grounded natural-language explanation")
     safety_note: str = Field(..., description="Grounded safety note or disclaimer")
     error: Optional[str] = Field(None, description="Detailed provider or fallback error message")
+    quality: Optional[QualityCheck] = Field(None, description="Heuristic grounded quality assessment for this response")
+
+
+class GroundedChatRequest(BaseModel):
+    question: str = Field(..., description="End-user question about the grounded recommendation result")
+    specialty: str = Field(..., description="Grounded specialty code")
+    matched_symptoms: List[str] = Field(default_factory=list, description="Grounded matched symptoms")
+    danger_alert: Optional[str] = Field(None, description="Optional danger alert emitted by backend")
+    top_diseases: List[GroundedDisease] = Field(default_factory=list, description="Grounded disease candidates")
+    recommendations: List[GroundedRecommendation] = Field(
+        default_factory=list,
+        description="Grounded recommendation list approved by backend",
+    )
+    history: List[str] = Field(default_factory=list, description="Relevant grounded chronic conditions")
+    allergies: List[str] = Field(default_factory=list, description="Relevant grounded allergy names or ingredients")
+    conversation: List[GroundedChatTurn] = Field(
+        default_factory=list,
+        description="Optional recent conversation turns for a multi-turn chat experience",
+    )
+    grounding_rules: GroundingRules = Field(
+        default_factory=GroundingRules,
+        description="Prompt grounding constraints passed through from backend",
+    )
+
+
+class GroundedChatResponse(BaseModel):
+    success: bool = Field(..., description="Flag indicating if a provider produced a grounded chat answer")
+    provider: str = Field(..., description="The provider used ('gemini', 'groq', 'zhipu', or 'none')")
+    answer: str = Field(..., description="Grounded natural-language answer for the user")
+    safety_note: str = Field(..., description="Safety note or disclaimer")
+    error: Optional[str] = Field(None, description="Detailed provider or fallback error message")
+    quality: Optional[QualityCheck] = Field(None, description="Heuristic grounded quality assessment for this response")

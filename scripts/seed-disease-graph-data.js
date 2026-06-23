@@ -26,8 +26,14 @@ const DEFAULTS = {
   timeoutMs: 15000,
   requestDelayMs: 200,
   maxApiPages: 12,
+  strict: false,
+  offline: false,
   userAgent: 'MedAssistStudentCrawler/1.0 (+educational offline seed/sync script)',
 };
+
+const PUBLIC_DISEASE_SOURCES = new Set(['clinical_tables_conditions']);
+const PUBLIC_DRUG_SOURCES = new Set(['rxterms', 'rxnorm', 'openfda_label']);
+const SYNTHETIC_SOURCES = new Set(['local_synthetic_review']);
 
 const DISEASE_TYPES = [
   ['tim_mach', 'Tim mạch', 1, 'Bệnh lý tim và hệ tuần hoàn.'],
@@ -226,6 +232,8 @@ function parseArgs() {
     if (key === 'output-dir') parsed.outputDir = path.resolve(rawValue);
     if (key === 'request-delay-ms') parsed.requestDelayMs = Number(rawValue);
     if (key === 'max-api-pages') parsed.maxApiPages = Number(rawValue);
+    if (key === 'strict') parsed.strict = rawValue === undefined ? true : rawValue !== 'false';
+    if (key === 'offline') parsed.offline = rawValue === undefined ? true : rawValue !== 'false';
   }
   return parsed;
 }
@@ -327,8 +335,13 @@ function makeDrug(name, category = 'review_candidate', dosageForm = 'unknown', s
   };
 }
 
-function buildGeneratedDiseaseSeeds(minDiseases) {
-  const generated = [...LOCAL_DISEASE_SEEDS];
+function buildLocalDiseaseRows(keywordConfig, icd10Rules) {
+  return LOCAL_DISEASE_SEEDS.map((seed) => makeDisease(seed, keywordConfig, icd10Rules, 'local_seed'));
+}
+
+function buildSyntheticDiseaseSeeds(targetCount) {
+  if (targetCount <= 0) return [];
+  const generated = [];
   const baseByType = new Map(DISEASE_TYPES.map((type) => [type.code, []]));
   for (const seed of LOCAL_DISEASE_SEEDS) baseByType.get(seed[0])?.push(seed);
 
@@ -336,27 +349,32 @@ function buildGeneratedDiseaseSeeds(minDiseases) {
     const seeds = baseByType.get(type.code) || [];
     const sourceSeeds = seeds.length ? seeds : [[type.code, `${type.name} review condition`, '', [], ['fatigue'], ['Clinical review']]];
     let index = 1;
-    while (generated.length < minDiseases && index <= Math.ceil(minDiseases / DISEASE_TYPES.length) + 3) {
+    while (generated.length < targetCount && index <= Math.ceil(targetCount / DISEASE_TYPES.length) + 3) {
       for (const seed of sourceSeeds) {
         const [, name, , synonyms, symptomHints, drugHints] = seed;
         const variantName = `${name} review profile ${index}`;
         generated.push([type.code, variantName, '', synonyms, symptomHints, drugHints]);
-        if (generated.length >= minDiseases) break;
+        if (generated.length >= targetCount) break;
       }
       index += 1;
     }
-    if (generated.length >= minDiseases) break;
+    if (generated.length >= targetCount) break;
   }
   return generated;
 }
 
-function buildGeneratedDrugSeeds(minDrugs) {
-  const generated = [...DRUG_FALLBACKS];
+function buildLocalDrugRows() {
+  return DRUG_FALLBACKS.map(([name, category, dosageForm]) => makeDrug(name, category, dosageForm, 'local_seed'));
+}
+
+function buildSyntheticDrugSeeds(targetCount) {
+  if (targetCount <= 0) return [];
+  const generated = [];
   let index = 1;
-  while (generated.length < minDrugs) {
+  while (generated.length < targetCount) {
     for (const [name, category, dosageForm] of DRUG_FALLBACKS) {
       generated.push([`${name} review formulation ${index}`, category, dosageForm]);
-      if (generated.length >= minDrugs) break;
+      if (generated.length >= targetCount) break;
     }
     index += 1;
   }
@@ -398,11 +416,19 @@ async function fetchClinicalTableConditions(options, keywordConfig, icd10Rules, 
 }
 
 async function fetchAndNormalizeDiseases(options, keywordConfig, icd10Rules, warnings) {
-  const apiRows = await fetchClinicalTableConditions(options, keywordConfig, icd10Rules, warnings);
-  const fallbackRows = buildGeneratedDiseaseSeeds(options.minDiseases)
-    .map((seed) => makeDisease(seed, keywordConfig, icd10Rules, 'local_fallback_review'));
-  const diseases = uniqBy([...apiRows, ...fallbackRows], (item) => item.code).slice(0, Math.max(options.minDiseases, apiRows.length));
-  if (apiRows.length === 0) warnings.push('Disease API enrichment unavailable or empty; generated review candidates were used.');
+  const apiRows = options.offline || options.maxApiPages <= 0
+    ? []
+    : await fetchClinicalTableConditions(options, keywordConfig, icd10Rules, warnings);
+  const localSeedRows = buildLocalDiseaseRows(keywordConfig, icd10Rules);
+  const baseRows = uniqBy([...apiRows, ...localSeedRows], (item) => item.code);
+  const syntheticRows = options.strict
+    ? []
+    : buildSyntheticDiseaseSeeds(Math.max(0, options.minDiseases - baseRows.length))
+      .map((seed) => makeDisease(seed, keywordConfig, icd10Rules, 'local_synthetic_review'));
+  const diseases = uniqBy([...baseRows, ...syntheticRows], (item) => item.code)
+    .slice(0, Math.max(options.minDiseases, baseRows.length));
+  if (apiRows.length === 0) warnings.push('Disease public-source enrichment unavailable or skipped; report coverage depends on local curated seeds only.');
+  if (syntheticRows.length > 0) warnings.push(`Disease output used ${syntheticRows.length} synthetic review rows to reach minimum coverage.`);
   if (diseases.length < options.minDiseases) warnings.push(`Disease count ${diseases.length} is below requested minimum ${options.minDiseases}.`);
   return diseases;
 }
@@ -426,7 +452,7 @@ async function fetchRxTermsDrugs(options, warnings) {
   return rows;
 }
 
-async function fetchRxNormDrugHints(warnings) {
+async function fetchRxNormDrugHints(options, warnings) {
   const rows = [];
   for (const [name, category, dosageForm] of DRUG_FALLBACKS.slice(0, 20)) {
     try {
@@ -437,7 +463,7 @@ async function fetchRxNormDrugHints(warnings) {
           rows.push(makeDrug(concept.name, category, dosageForm, 'rxnorm'));
         }
       }
-      await sleep(DEFAULTS.requestDelayMs);
+      await sleep(options.requestDelayMs);
     } catch (error) {
       warnings.push(`RxNorm fetch failed for "${name}": ${error.message}`);
       break;
@@ -446,7 +472,7 @@ async function fetchRxNormDrugHints(warnings) {
   return rows;
 }
 
-async function fetchOpenFdaDrugHints(warnings) {
+async function fetchOpenFdaDrugHints(options, warnings) {
   try {
     const response = await http.get('https://api.fda.gov/drug/label.json', {
       params: { search: 'openfda.generic_name:*', limit: 100 },
@@ -464,14 +490,23 @@ async function fetchOpenFdaDrugHints(warnings) {
 }
 
 async function fetchAndNormalizeDrugs(options, warnings) {
-  const [rxTermsRows, rxNormRows, openFdaRows] = await Promise.all([
-    fetchRxTermsDrugs(options, warnings),
-    fetchRxNormDrugHints(warnings),
-    fetchOpenFdaDrugHints(warnings),
-  ]);
-  const fallbackRows = buildGeneratedDrugSeeds(options.minDrugs).map(([name, category, dosageForm]) => makeDrug(name, category, dosageForm, 'local_fallback_review'));
-  const drugs = uniqBy([...rxTermsRows, ...rxNormRows, ...openFdaRows, ...fallbackRows], (item) => item.code).slice(0, Math.max(options.minDrugs, rxTermsRows.length + rxNormRows.length + openFdaRows.length));
-  if (rxTermsRows.length + rxNormRows.length + openFdaRows.length === 0) warnings.push('Drug API enrichment unavailable or empty; generated review candidates were used.');
+  const [rxTermsRows, rxNormRows, openFdaRows] = options.offline || options.maxApiPages <= 0
+    ? [[], [], []]
+    : await Promise.all([
+      fetchRxTermsDrugs(options, warnings),
+      fetchRxNormDrugHints(options, warnings),
+      fetchOpenFdaDrugHints(options, warnings),
+    ]);
+  const localSeedRows = buildLocalDrugRows();
+  const baseRows = uniqBy([...rxTermsRows, ...rxNormRows, ...openFdaRows, ...localSeedRows], (item) => item.code);
+  const syntheticRows = options.strict
+    ? []
+    : buildSyntheticDrugSeeds(Math.max(0, options.minDrugs - baseRows.length))
+      .map(([name, category, dosageForm]) => makeDrug(name, category, dosageForm, 'local_synthetic_review'));
+  const drugs = uniqBy([...baseRows, ...syntheticRows], (item) => item.code)
+    .slice(0, Math.max(options.minDrugs, baseRows.length));
+  if (rxTermsRows.length + rxNormRows.length + openFdaRows.length === 0) warnings.push('Drug public-source enrichment unavailable or skipped; report coverage depends on local curated seeds only.');
+  if (syntheticRows.length > 0) warnings.push(`Drug output used ${syntheticRows.length} synthetic review rows to reach minimum coverage.`);
   if (drugs.length < options.minDrugs) warnings.push(`Drug count ${drugs.length} is below requested minimum ${options.minDrugs}.`);
   return drugs;
 }
@@ -485,7 +520,7 @@ function buildDiseaseSymptoms(diseases) {
       mappings.push({
         disease_code: disease.code,
         symptom_code: symptomCode,
-        confidence_score: disease.source_primary.includes('fallback') ? 0.55 : 0.62,
+        confidence_score: isSyntheticSource(disease.source_primary) ? 0.55 : 0.62,
         evidence_note: `Matched from disease symptom hint "${hint}". Review before import.`,
       });
     }
@@ -521,7 +556,7 @@ function buildDiseaseDrugs(diseases, drugs) {
         disease_code: disease.code,
         drug_name: drug.name,
         drug_code: drug.code,
-        confidence_score: disease.source_primary.includes('fallback') ? 0.5 : 0.58,
+        confidence_score: isSyntheticSource(disease.source_primary) ? 0.5 : 0.58,
         priority_rank: index + 1,
         evidence_note: `Matched from disease drug hint "${hint}". Review indication and contraindications before import.`,
       });
@@ -534,7 +569,65 @@ async function writeCsv(filePath, header, records) {
   await createObjectCsvWriter({ path: filePath, header }).writeRecords(records);
 }
 
-function buildImportSql(diseaseTypes, counts) {
+function countBySource(records) {
+  const counts = {};
+  for (const record of records) {
+    const key = record.source_primary || 'unknown';
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
+}
+
+function isSyntheticSource(sourcePrimary) {
+  return SYNTHETIC_SOURCES.has(sourcePrimary);
+}
+
+function summarizeCoverage(records, publicSources) {
+  const bySource = countBySource(records);
+  const distinctSources = Object.keys(bySource).sort();
+  const publicSourcesSeen = distinctSources.filter((source) => publicSources.has(source));
+  const publicSourceRows = publicSourcesSeen.reduce((sum, source) => sum + bySource[source], 0);
+  const syntheticRows = distinctSources
+    .filter((source) => SYNTHETIC_SOURCES.has(source))
+    .reduce((sum, source) => sum + bySource[source], 0);
+  const localSeedRows = bySource.local_seed || 0;
+
+  return {
+    total_rows: records.length,
+    by_source: bySource,
+    distinct_sources: distinctSources,
+    public_sources_seen: publicSourcesSeen,
+    public_source_rows: publicSourceRows,
+    local_seed_rows: localSeedRows,
+    synthetic_rows: syntheticRows,
+  };
+}
+
+function buildStrictStatus(options, counts, sourceCoverage) {
+  const minimumsMet = {
+    diseases: counts.diseases >= options.minDiseases,
+    drugs: counts.drugs >= options.minDrugs,
+  };
+  const syntheticPaddingUsed = {
+    diseases: sourceCoverage.diseases.synthetic_rows > 0,
+    drugs: sourceCoverage.drugs.synthetic_rows > 0,
+  };
+  const passed = !options.strict || (
+    minimumsMet.diseases &&
+    minimumsMet.drugs &&
+    !syntheticPaddingUsed.diseases &&
+    !syntheticPaddingUsed.drugs
+  );
+
+  return {
+    enabled: options.strict,
+    passed,
+    minimums_met: minimumsMet,
+    synthetic_padding_used: syntheticPaddingUsed,
+  };
+}
+
+function buildImportSql(diseaseTypes, counts, sourceCoverage, strictStatus) {
   const values = diseaseTypes.map((type) => {
     return `  (${sqlString(type.code)}, ${sqlString(type.name)}, ${sqlString(type.description)}, ${type.display_order})`;
   }).join(',\n');
@@ -555,12 +648,19 @@ ON CONFLICT (code) DO UPDATE SET
 -- drugs_review.csv rows: ${counts.drugs}
 -- disease_symptoms_review.csv rows: ${counts.diseaseSymptoms}
 -- disease_drugs_review.csv rows: ${counts.diseaseDrugs}
+-- strict mode: ${strictStatus.enabled ? 'enabled' : 'disabled'}
+-- strict status passed: ${strictStatus.passed ? 'yes' : 'no'}
+-- disease public-source rows: ${sourceCoverage.diseases.public_source_rows}
+-- drug public-source rows: ${sourceCoverage.drugs.public_source_rows}
+-- disease synthetic rows: ${sourceCoverage.diseases.synthetic_rows}
+-- drug synthetic rows: ${sourceCoverage.drugs.synthetic_rows}
 --
 -- Import guidance:
 -- 1. Review diseases_review.csv and drugs_review.csv for clinical quality and duplicates.
 -- 2. Insert curated disease rows after resolving disease_type_id by disease_type_code.
 -- 3. Insert curated drug rows or map to existing drugs by normalized name.
 -- 4. Insert disease_symptoms and disease_drugs only after resolving UUIDs from reviewed codes/names.
+-- 5. Do not promote rows with source_primary = 'local_synthetic_review' into production datasets.
 `;
 }
 
@@ -621,26 +721,38 @@ async function writeArtifacts(options, diseaseTypes, diseases, drugs, diseaseSym
     diseaseDrugs: diseaseDrugs.length,
   };
 
-  fs.writeFileSync(path.join(options.outputDir, 'import.sql'), buildImportSql(diseaseTypes, counts));
-  fs.writeFileSync(path.join(options.outputDir, 'scrape_report.json'), `${JSON.stringify({
+  const sourceCoverage = {
+    diseases: summarizeCoverage(diseases, PUBLIC_DISEASE_SOURCES),
+    drugs: summarizeCoverage(drugs, PUBLIC_DRUG_SOURCES),
+  };
+  const strictStatus = buildStrictStatus(options, counts, sourceCoverage);
+  const report = {
     generated_at: new Date().toISOString(),
     options: {
       outputDir: options.outputDir,
       minDiseases: options.minDiseases,
       minDrugs: options.minDrugs,
       maxApiPages: options.maxApiPages,
+      strict: options.strict,
+      offline: options.offline,
     },
     counts,
+    source_coverage: sourceCoverage,
+    strict_status: strictStatus,
     warnings,
     note: 'Public APIs are offline seed/sync sources only and must not be used for runtime medical recommendations.',
-  }, null, 2)}\n`);
+  };
 
-  return counts;
+  fs.writeFileSync(path.join(options.outputDir, 'import.sql'), buildImportSql(diseaseTypes, counts, sourceCoverage, strictStatus));
+  fs.writeFileSync(path.join(options.outputDir, 'scrape_report.json'), `${JSON.stringify(report, null, 2)}\n`);
+
+  return { counts, report };
 }
 
 async function main() {
   const options = parseArgs();
   const warnings = [];
+  if (options.offline) warnings.push('Network fetch disabled by --offline; only local curated seeds and optional synthetic review rows are available.');
   const keywordConfig = loadJson('data/seed-config/disease-type-keywords.json');
   const icd10Rules = loadJson('data/seed-config/disease-type-icd10-rules.json');
 
@@ -648,13 +760,17 @@ async function main() {
   const drugs = await fetchAndNormalizeDrugs(options, warnings);
   const diseaseSymptoms = buildDiseaseSymptoms(diseases);
   const diseaseDrugs = buildDiseaseDrugs(diseases, drugs);
-  const counts = await writeArtifacts(options, DISEASE_TYPES, diseases, drugs, diseaseSymptoms, diseaseDrugs, warnings);
+  const { counts, report } = await writeArtifacts(options, DISEASE_TYPES, diseases, drugs, diseaseSymptoms, diseaseDrugs, warnings);
 
   console.log(`Wrote disease graph seed artifacts to ${options.outputDir}`);
   console.log(`Counts: ${JSON.stringify(counts)}`);
+  console.log(`Strict status: ${JSON.stringify(report.strict_status)}`);
   if (warnings.length) {
     console.log('Warnings:');
     for (const warning of warnings) console.log(`- ${warning}`);
+  }
+  if (options.strict && !report.strict_status.passed) {
+    throw new Error('Strict mode failed: minimum counts were not met without synthetic padding.');
   }
 }
 

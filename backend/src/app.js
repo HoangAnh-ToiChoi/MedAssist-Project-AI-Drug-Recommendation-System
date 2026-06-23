@@ -6,6 +6,8 @@ const symptomRoutes = require('./routes/symptomRoutes')
 const specialtyRoutes = require('./routes/specialtyRoutes')
 const historyRoutes = require('./routes/historyRoutes')
 const allergyRoutes = require('./routes/allergyRoutes')
+const chatbotRoutes = require('./routes/chatbotRoutes')
+const appConfig = require('./config/appConfig')
 
 const logger = require('./utils/logger')
 
@@ -40,13 +42,44 @@ app.use((req, res, next) => {
   next()
 })
 
-app.get('/health', (req, res) => res.json({ status: 'ok' }))
+app.get('/health', async (req, res) => {
+  const pool = require('./config/db')
+  const redisClient = require('./config/redis')
+  const [databaseCheck, redisCheck] = await Promise.allSettled([
+    pool.query('SELECT 1'),
+    redisClient.ping(),
+  ])
+
+  const databaseStatus = databaseCheck.status === 'fulfilled' ? 'up' : 'down'
+  const redisStatus = redisCheck.status === 'fulfilled' ? 'up' : 'down'
+
+  res.json({
+    status: databaseStatus === 'up' ? (redisStatus === 'up' ? 'ok' : 'degraded') : 'degraded',
+    timestamp: new Date().toISOString(),
+    environment: appConfig.env,
+    uptimeSeconds: Math.round(process.uptime()),
+    ai: {
+      serviceConfigured: Boolean(appConfig.ai.serviceUrl),
+      timeoutMs: appConfig.ai.serviceTimeoutMs,
+      explanationsEnabled: appConfig.ai.explanationsEnabled,
+    },
+    services: {
+      database: {
+        status: databaseStatus,
+      },
+      redis: {
+        status: redisStatus,
+      },
+    },
+  })
+})
 
 app.use('/api/v1/auth', authRoutes)
 app.use('/api/v1/symptoms', symptomRoutes)
 app.use('/api/v1/specialties', specialtyRoutes)
 app.use('/api/v1/history', historyRoutes)
 app.use('/api/v1/allergies', allergyRoutes)
+app.use('/api/v1/chatbot', chatbotRoutes)
 
 app.use(errorHandler)
 

@@ -8,10 +8,12 @@ import pytest
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.chatbot import chat_with_fallback, try_gemini, try_groq, try_zhipu
+from services.provider_router import reset_provider_health_metrics
 
 pytestmark = pytest.mark.asyncio
 
 async def test_successful_gemini():
+    reset_provider_health_metrics()
     print("Running Test 1: Gemini succeeds...")
     
     mock_response = AsyncMock()
@@ -33,6 +35,7 @@ async def test_successful_gemini():
             print("✅ Test 1 Passed!")
 
 async def test_fallback_to_groq():
+    reset_provider_health_metrics()
     print("Running Test 2: Gemini fails, Groq succeeds...")
     
     # Mock Gemini to fail (status code 500)
@@ -67,6 +70,7 @@ async def test_fallback_to_groq():
                 print("✅ Test 2 Passed!")
 
 async def test_fallback_to_zhipu():
+    reset_provider_health_metrics()
     print("Running Test 3: Gemini and Groq fail, Zhipu succeeds...")
     
     fail_response = AsyncMock()
@@ -99,6 +103,7 @@ async def test_fallback_to_zhipu():
                     print("✅ Test 3 Passed!")
 
 async def test_all_fail():
+    reset_provider_health_metrics()
     print("Running Test 4: All providers fail...")
     
     fail_response = AsyncMock()

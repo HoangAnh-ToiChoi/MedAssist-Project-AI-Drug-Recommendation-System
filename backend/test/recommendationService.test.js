@@ -33,6 +33,7 @@ const createService = ({
   findDiseaseGraphRecommendations,
   saveId,
   aiEngines,
+  aiAuditLogService,
 }) =>
   new RecommendationService(
     {
@@ -62,7 +63,8 @@ const createService = ({
       },
     },
     createRedisFailureMock(),
-    aiEngines
+    aiEngines,
+    aiAuditLogService
   )
 
 test('checkSymptoms scopes normalization to specialty and survives redis failures', async () => {
@@ -281,6 +283,10 @@ test('checkSymptoms attaches AI explanation when engine returns one for grounded
             summary: 'Grounded recommendation summary.',
             explanation: 'Grounded recommendation explanation.',
             safetyNote: 'Escalate care if symptoms worsen.',
+            quality: {
+              status: 'pass',
+              score: 0.9,
+            },
           }
         },
       },
@@ -299,6 +305,10 @@ test('checkSymptoms attaches AI explanation when engine returns one for grounded
     summary: 'Grounded recommendation summary.',
     explanation: 'Grounded recommendation explanation.',
     safetyNote: 'Escalate care if symptoms worsen.',
+    quality: {
+      status: 'pass',
+      score: 0.9,
+    },
   })
 })
 
@@ -345,4 +355,108 @@ test('checkSymptoms keeps recommendation success when AI explanation fails', asy
     safetyNote: 'Canh bao y te.',
     error: 'explanation timeout',
   })
+})
+
+test('checkSymptoms emits durable audit metadata for grounded explanation', async () => {
+  const auditEvents = []
+  const service = createService({
+    saveId: 'rec-audit-1',
+    aiAuditLogService: {
+      async record(event) {
+        auditEvents.push(event)
+      },
+    },
+    aiEngines: [
+      {
+        provider: 'ai-service',
+        async getRecommendations() {
+          return {
+            engineVersion: 'ai-service-v2',
+            matchedSymptoms: ['sot'],
+            topDiseases: [{ id: 'disease-7', code: 'flu', displayName: 'Cum', score: 0.77 }],
+            recommendations: [
+              {
+                name: 'Paracetamol 500mg',
+                generic_name: 'Paracetamol',
+                confidence: 0.93,
+                contraindications: '',
+              },
+            ],
+            dangerAlert: null,
+          }
+        },
+        async explainGroundedRecommendation() {
+          return {
+            enabled: true,
+            status: 'success',
+            provider: 'ai-service',
+            summary: 'summary',
+            explanation: 'explanation',
+            safetyNote: 'safe',
+          }
+        },
+      },
+    ],
+  })
+
+  const result = await service.checkSymptoms('user-1', 'noi_khoa', ['sot'])
+
+  assert.equal(result.id, 'rec-audit-1')
+  assert.equal(auditEvents.length, 1)
+  assert.equal(auditEvents[0].eventType, 'recommendation_explanation')
+  assert.equal(auditEvents[0].userId, 'user-1')
+  assert.equal(auditEvents[0].recommendationId, 'rec-audit-1')
+  assert.equal(auditEvents[0].provider, 'ai-service')
+  assert.equal(auditEvents[0].status, 'success')
+  assert.equal(auditEvents[0].fallbackUsed, false)
+  assert.equal(auditEvents[0].requestPayload.specialty, 'noi_khoa')
+  assert.deepEqual(auditEvents[0].responsePayload, result.llmExplanation)
+  assert.equal(typeof auditEvents[0].latencyMs, 'number')
+})
+
+test('checkSymptoms ignores audit persistence failures', async () => {
+  const service = createService({
+    saveId: 'rec-audit-2',
+    aiAuditLogService: {
+      async record() {
+        throw new Error('audit insert failed')
+      },
+    },
+    aiEngines: [
+      {
+        provider: 'ai-service',
+        async getRecommendations() {
+          return {
+            engineVersion: 'ai-service-v2',
+            matchedSymptoms: ['ho'],
+            topDiseases: [],
+            recommendations: [
+              {
+                name: 'Dextromethorphan',
+                generic_name: 'Dextromethorphan',
+                confidence: 0.61,
+                contraindications: '',
+              },
+            ],
+            dangerAlert: null,
+          }
+        },
+        async explainGroundedRecommendation() {
+          return {
+            enabled: true,
+            status: 'success',
+            provider: 'ai-service',
+            summary: 'summary',
+            explanation: 'explanation',
+            safetyNote: 'safe',
+          }
+        },
+      },
+    ],
+  })
+
+  const result = await service.checkSymptoms('user-1', 'ho_hap', ['ho'])
+
+  assert.equal(result.id, 'rec-audit-2')
+  assert.equal(result.llmExplanation.status, 'success')
 })
