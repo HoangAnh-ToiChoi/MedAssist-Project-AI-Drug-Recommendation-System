@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
 import api from '../services/api';
@@ -61,8 +61,101 @@ const Login = () => {
     }
   };
 
+  useEffect(() => {
+    const handleCallback = async () => {
+      // Check query and hash parameters for returned social tokens
+      let hash = window.location.hash;
+      if (!hash) {
+        const search = window.location.search;
+        if (search) {
+          hash = search.substring(1);
+        }
+      } else {
+        hash = hash.substring(1);
+      }
+
+      if (!hash) return;
+
+      const params = new URLSearchParams(hash);
+      const state = params.get('state');
+      
+      let endpoint = '';
+      let payload = null;
+
+      if (state === 'google') {
+        const idToken = params.get('id_token');
+        if (idToken) {
+          endpoint = '/auth/google';
+          payload = { idToken };
+        }
+      } else if (state === 'facebook') {
+        const accessToken = params.get('access_token');
+        if (accessToken) {
+          endpoint = '/auth/facebook';
+          payload = { accessToken };
+        }
+      } else if (state === 'apple') {
+        const idToken = params.get('id_token');
+        if (idToken) {
+          endpoint = '/auth/apple';
+          payload = { idToken };
+        }
+      }
+
+      if (endpoint && payload) {
+        setLoading(true);
+        setError('');
+        try {
+          const response = await api.post(endpoint, payload);
+          const { accessToken, refreshToken, user } = response.data.data;
+          localStorage.setItem('accessToken', accessToken);
+          localStorage.setItem('refreshToken', refreshToken);
+          localStorage.setItem('user', JSON.stringify(user));
+          
+          // Clear query/hash params from the address bar
+          window.history.replaceState({}, document.title, window.location.pathname);
+          navigate('/dashboard');
+        } catch (err) {
+          setError(err.response?.data?.message || 'Xác thực tài khoản liên kết thất bại.');
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    handleCallback();
+  }, [navigate]);
+
   const handleSocialLogin = async (provider) => {
     setError('');
+    
+    // Redirect to real OAuth providers if Client/App IDs are configured
+    if (provider === 'google' && import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      const redirectUri = window.location.origin + '/login';
+      const scope = 'openid email profile';
+      const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=${encodeURIComponent(scope)}&state=google&nonce=medassist_${Date.now()}`;
+      window.location.href = url;
+      return;
+    }
+
+    if (provider === 'facebook' && import.meta.env.VITE_FACEBOOK_APP_ID) {
+      const appId = import.meta.env.VITE_FACEBOOK_APP_ID;
+      const redirectUri = window.location.origin + '/login';
+      const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=email&state=facebook`;
+      window.location.href = url;
+      return;
+    }
+
+    if (provider === 'apple' && import.meta.env.VITE_APPLE_CLIENT_ID) {
+      const clientId = import.meta.env.VITE_APPLE_CLIENT_ID;
+      const redirectUri = import.meta.env.VITE_APPLE_REDIRECT_URI || (window.location.origin + '/login');
+      const url = `https://appleid.apple.com/auth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=name%20email&response_mode=fragment&state=apple`;
+      window.location.href = url;
+      return;
+    }
+
+    // Otherwise, fall back to mock sandbox token flow
     setLoading(true);
     try {
       let endpoint, payload;
