@@ -764,6 +764,40 @@ const aiAuditInsightsControllerMock = {
   },
 }
 
+const profileControllerMock = {
+  getProfile(req, res) {
+    res.json({
+      success: true,
+      message: 'Profile loaded',
+      data: { id: req.user.id },
+    })
+  },
+  updateProfile(req, res) {
+    res.json({
+      success: true,
+      message: 'Profile updated',
+      data: req.body,
+    })
+  },
+}
+
+const adminControllerMock = {
+  getAllUsers(req, res) {
+    res.json({
+      success: true,
+      message: 'Users loaded',
+      data: [],
+    })
+  },
+  updateUserStatus(req, res) {
+    res.json({
+      success: true,
+      message: 'User status updated',
+      data: { id: req.params.id, isActive: req.body.isActive },
+    })
+  },
+}
+
 const authMiddlewareMock = (req, res, next) => {
   const header = req.headers.authorization
 
@@ -787,6 +821,8 @@ const containerMock = {
     if (name === 'recommendationController') return recommendationControllerMock
     if (name === 'chatbotController') return chatbotControllerMock
     if (name === 'aiAuditInsightsController') return aiAuditInsightsControllerMock
+    if (name === 'profileController') return profileControllerMock
+    if (name === 'adminController') return adminControllerMock
     throw new Error(`Unexpected container resolve: ${name}`)
   },
 }
@@ -810,7 +846,13 @@ Module._load = function patchedModuleLoad(request, parent, isMain) {
     return loggerMock
   }
 
-  if (request === './routes/authRoutes' || request === './routes/historyRoutes' || request === './routes/allergyRoutes') {
+  if (
+    request === './routes/authRoutes' ||
+    request === './routes/historyRoutes' ||
+    request === './routes/allergyRoutes' ||
+    request === './routes/profileRoutes' ||
+    request === './routes/adminRoutes'
+  ) {
     return createRouter()
   }
 

@@ -1,5 +1,5 @@
 class User {
-  constructor({ id, email, passwordHash, fullName, role, isActive, createdAt, updatedAt }) {
+  constructor({ id, email, passwordHash, fullName, role, isActive, createdAt, updatedAt, dateOfBirth, gender, phoneNumber }) {
     this.id = id
     this.email = email
     this.passwordHash = passwordHash
@@ -8,6 +8,9 @@ class User {
     this.isActive = isActive !== undefined ? isActive : true
     this.createdAt = createdAt
     this.updatedAt = updatedAt
+    this.dateOfBirth = dateOfBirth
+    this.gender = gender
+    this.phoneNumber = phoneNumber
   }
 
   isNew() {
@@ -26,8 +29,11 @@ class User {
     this.isActive = false
   }
 
-  updateProfile({ fullName }) {
-    this.fullName = fullName
+  updateProfile({ fullName, dateOfBirth, gender, phoneNumber }) {
+    if (fullName !== undefined) this.fullName = fullName
+    if (dateOfBirth !== undefined) this.dateOfBirth = dateOfBirth
+    if (gender !== undefined) this.gender = gender
+    if (phoneNumber !== undefined) this.phoneNumber = phoneNumber
   }
 
   async verifyPassword(plainPassword, bcrypt) {
@@ -45,6 +51,9 @@ class User {
       email: this.email,
       fullName: this.fullName,
       role: this.role,
+      dateOfBirth: this.dateOfBirth,
+      gender: this.gender,
+      phoneNumber: this.phoneNumber,
       createdAt: this.createdAt,
     }
   }
@@ -61,6 +70,9 @@ class User {
       isActive: row.is_active,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      dateOfBirth: row.date_of_birth,
+      gender: row.gender,
+      phoneNumber: row.phone_number,
     })
   }
 }

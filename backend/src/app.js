@@ -9,6 +9,8 @@ const allergyRoutes = require('./routes/allergyRoutes')
 const chatbotRoutes = require('./routes/chatbotRoutes')
 const aiInsightsRoutes = require('./routes/aiInsightsRoutes')
 const appConfig = require('./config/appConfig')
+const profileRoutes = require('./routes/profileRoutes')
+const adminRoutes = require('./routes/adminRoutes')
 
 const logger = require('./utils/logger')
 
@@ -82,6 +84,8 @@ app.use('/api/v1/history', historyRoutes)
 app.use('/api/v1/allergies', allergyRoutes)
 app.use('/api/v1/chatbot', chatbotRoutes)
 app.use('/api/v1/ai/insights', aiInsightsRoutes)
+app.use('/api/v1/profile', profileRoutes)
+app.use('/api/v1/admin', adminRoutes)
 
 app.use(errorHandler)
 

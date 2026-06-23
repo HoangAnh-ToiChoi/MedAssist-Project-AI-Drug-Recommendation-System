@@ -32,6 +32,7 @@ const Navbar = () => {
     { to: '/symptoms', label: 'Kiểm tra triệu chứng' },
     { to: '/medical-history', label: 'Tiền sử bệnh lý' },
     { to: '/allergies', label: 'Dị ứng thuốc' },
+    { to: '/profile', label: 'Thông tin cá nhân' },
     ...(isAdmin ? [{ to: '/ai-insights', label: 'AI Insights' }] : []),
   ]
 

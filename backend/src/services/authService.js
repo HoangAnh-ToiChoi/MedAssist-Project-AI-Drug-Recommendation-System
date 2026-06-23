@@ -79,17 +79,23 @@ class AuthService {
     await this.#sendOtp(user.email, user.fullName)
   }
 
+  /**
+   * CHCKNSPC-110 — Anti User Enumeration (OWASP V2.7)
+   *
+   * Mọi trường hợp email/password sai đều trả về CÙNG message "Email hoặc mật khẩu không đúng"
+   * thông qua #handleFailedLogin(), bao gồm:
+   *   - Email không tồn tại (active)
+   *   - Email tồn tại nhưng chưa xác thực OTP (không tiết lộ trạng thái tài khoản)
+   *   - Mật khẩu sai
+   */
   async login(email, password) {
     const normalizedEmail = this.#normalizeEmail(email)
     await this.#assertLoginNotLocked(normalizedEmail)
 
     const user = await this.#userRepo.findByEmail(normalizedEmail)
     if (!user) {
-      const pendingUser = await this.#userRepo.findByEmailIncludingInactive(normalizedEmail)
-      if (pendingUser && !pendingUser.isVerified()) {
-        throw new AppError('Tài khoản chưa xác thực OTP', 403, 'ACCOUNT_NOT_VERIFIED')
-      }
-
+      // OWASP V2.7: Không phân biệt "email không tồn tại" vs "chưa xác thực OTP"
+      // Cả hai trường hợp đều bị xử lý như thông tin xác thực sai → 401 generic
       await this.#handleFailedLogin(normalizedEmail)
     }
 
@@ -102,10 +108,22 @@ class AuthService {
     return this.#generateTokens(user)
   }
 
+  /**
+   * CHCKNSPC-110 — Anti User Enumeration cho Forgot Password (OWASP V2.7)
+   *
+   * Dù email CÓ hay KHÔNG tồn tại trong hệ thống, luôn trả về cùng message thành công.
+   * Điều này ngăn hacker dùng endpoint này để dò tìm email đã đăng ký.
+   *
+   * @returns {{ message: string }} Message chung chung để controller render HTTP 200.
+   */
   async forgotPassword(email) {
+    const GENERIC_MESSAGE = 'Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đi.'
+
     const normalizedEmail = this.#normalizeEmail(email)
     const user = await this.#userRepo.findByEmail(normalizedEmail)
-    if (!user) return
+
+    // Email không tồn tại → im lặng, trả về message chung (KHÔNG throw 404)
+    if (!user) return { message: GENERIC_MESSAGE }
 
     const resetToken = crypto.randomBytes(32).toString('hex')
     await this.#redis.setEx(`reset:${resetToken}`, RESET_TOKEN_TTL_SECONDS, user.id)
@@ -115,7 +133,7 @@ class AuthService {
     if (process.env.NODE_ENV === 'development') {
       const logger = require('../utils/logger')
       logger.info(`[DEV] Reset token cho ${user.email} - Token: ${resetToken} - Link: ${resetLink}`)
-      return
+      return { message: GENERIC_MESSAGE }
     }
 
     await this.#emailTransporter.sendMail({
@@ -129,6 +147,8 @@ class AuthService {
         <p>Nếu bạn không yêu cầu điều này, hãy bỏ qua email này.</p>
       `,
     })
+
+    return { message: GENERIC_MESSAGE }
   }
 
   async resetPassword(token, newPassword) {
@@ -145,35 +165,80 @@ class AuthService {
     await user.changePassword(newPassword, bcrypt)
     await this.#userRepo.save(user)
     await this.#redis.del(`reset:${token}`)
+
+    // Thu hồi tất cả refresh token: xóa cả DB record lẫn Redis key
+    // Redis key phải bị xóa để vô hiệu hóa ngay lập tức mọi phiên đang active
     await this.#refreshTokenRepo.revokeAllByUserId(user.id)
+    await this.#redis.del(`refresh:${user.id}`)
   }
 
+
+  /**
+   * CHCKNSPC-109 — Refresh Token Rotation (Redis-based)
+   *
+   * Flow:
+   *   1. Verify chữ ký JWT bằng JWT_REFRESH_SECRET.
+   *   2. Lấy userId từ payload.
+   *   3. Đọc Redis key `refresh:{userId}` → so sánh với token gửi lên.
+   *   4. Nếu khớp → tạo cặp token mới → setEx key mới vào Redis (rotation) → trả về.
+   *   5. Nếu không khớp → 401 (có thể là token reuse attack).
+   *
+   * @param {string} token - Refresh token từ request body.
+   * @returns {{ accessToken, refreshToken, user }} Cặp token mới.
+   */
   async refreshToken(token) {
     const payload = this.#verifyRefreshToken(token)
-    const tokenHash = this.#hashToken(token)
-    const stored = await this.#refreshTokenRepo.findActiveByTokenHash(tokenHash)
+    const { userId } = payload
+    const redisKey = `refresh:${userId}`
 
-    if (!stored || stored.user_id !== payload.userId) {
+    let storedToken
+    try {
+      storedToken = await this.#redis.get(redisKey)
+    } catch (redisErr) {
+      const logger = require('../utils/logger')
+      logger.error(`[AuthService] Redis error khi đọc refresh token (userId=${userId}): ${redisErr.message}`)
+      throw new AppError('Lỗi hệ thống, vui lòng thử lại', 503, 'SERVICE_UNAVAILABLE')
+    }
+
+    // Không tìm thấy hoặc token không khớp → có thể là token reuse / đã logout
+    if (!storedToken || storedToken !== token) {
       throw new AppError('Refresh token không hợp lệ hoặc đã hết hạn', 401, 'INVALID_REFRESH_TOKEN')
     }
 
-    const user = await this.#userRepo.findById(payload.userId)
+    const user = await this.#userRepo.findById(userId)
     if (!user) {
       throw new AppError('Tài khoản không tồn tại hoặc đã bị khóa', 401, 'USER_NOT_FOUND')
     }
 
-    await this.#refreshTokenRepo.revokeByTokenHash(tokenHash)
+    // Tạo cặp token mới; #generateTokens sẽ tự setEx key mới vào Redis (rotation)
     return this.#generateTokens(user)
   }
 
+  /**
+   * CHCKNSPC-109 — Logout / Thu hồi Refresh Token (Redis-based)
+   *
+   * Dùng ignoreExpiration:true để cho phép logout kể cả khi token vừa hết hạn.
+   * Nếu JWT signature sai hoàn toàn → trả về luôn (không throw, UX ưu tiên).
+   *
+   * @param {string} token - Refresh token từ request body.
+   */
   async logout(token) {
+    let payload
     try {
-      this.#verifyRefreshToken(token, { ignoreExpiration: true })
+      payload = this.#verifyRefreshToken(token, { ignoreExpiration: true })
     } catch {
+      // Token sai chữ ký hoàn toàn — không có gì để xóa, coi như logout thành công
       return
     }
 
-    await this.#refreshTokenRepo.revokeByTokenHash(this.#hashToken(token))
+    const { userId } = payload
+    try {
+      await this.#redis.del(`refresh:${userId}`)
+    } catch (redisErr) {
+      const logger = require('../utils/logger')
+      logger.error(`[AuthService] Redis error khi xóa refresh token (userId=${userId}): ${redisErr.message}`)
+      // Không throw — logout vẫn được coi là thành công về phía client
+    }
   }
 
   async #assertOtp(email, otp) {
@@ -221,6 +286,14 @@ class AuthService {
     })
   }
 
+  /**
+   * Tạo cặp Access / Refresh token và lưu trữ song song vào:
+   *   - Redis  : key `refresh:{userId}` (cho Token Rotation & Logout nhanh)
+   *   - DB     : bảng refresh_tokens (cho resetPassword → revokeAllByUserId)
+   *
+   * Redis setEx dùng cùng TTL với JWT_REFRESH_EXPIRES_IN (7d).
+   * Nếu Redis lỗi → chỉ log warn, KHÔNG block flow (DB vẫn là nguồn chân lý).
+   */
   async #generateTokens(user) {
     const accessToken = jwt.sign(
       {
@@ -242,11 +315,21 @@ class AuthService {
       { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN }
     )
 
+    // Lưu vào DB (dùng cho resetPassword → revokeAllByUserId)
     await this.#refreshTokenRepo.save({
       userId: user.id,
       tokenHash: this.#hashToken(refreshToken),
       expiresAt: this.#getRefreshTokenExpiresAt(),
     })
+
+    // Lưu raw token vào Redis (dùng cho Token Rotation & Logout)
+    // Ghi đè key cũ → đảm bảo chỉ 1 refresh token hợp lệ tại một thời điểm
+    try {
+      await this.#redis.setEx(`refresh:${user.id}`, REFRESH_TOKEN_TTL_SECONDS, refreshToken)
+    } catch (redisErr) {
+      const logger = require('../utils/logger')
+      logger.warn(`[AuthService] Redis setEx thất bại khi lưu refresh token (userId=${user.id}): ${redisErr.message}`)
+    }
 
     return {
       accessToken,

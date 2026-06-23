@@ -29,8 +29,10 @@ class AuthController {
 
   async forgotPassword(req, res, next) {
     try {
-      await this.#authService.forgotPassword(req.body.email)
-      res.json(ApiResponse.success(null, 'Nếu email tồn tại, bạn sẽ nhận được link đặt lại mật khẩu'))
+      // CHCKNSPC-110: Service luôn trả về { message } dù email có tồn tại hay không
+      // Controller chỉ việc render HTTP 200 với message đó — không bao giờ leak 404
+      const { message } = await this.#authService.forgotPassword(req.body.email)
+      res.json(ApiResponse.success(null, message))
     } catch (err) {
       next(err)
     }

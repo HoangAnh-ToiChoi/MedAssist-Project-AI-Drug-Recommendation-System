@@ -29,6 +29,8 @@ const SymptomService = require('../services/SymptomService')
 const RecommendationService = require('../services/RecommendationService')
 const SpecialtyService = require('../services/SpecialtyService')
 const ChatbotService = require('../services/ChatbotService')
+const ProfileService = require('../services/profileService')
+const AdminService = require('../services/adminService')
 
 // Controllers
 const AuthController = require('../controllers/authController')
@@ -39,6 +41,8 @@ const RecommendationController = require('../controllers/RecommendationControlle
 const SpecialtyController = require('../controllers/SpecialtyController')
 const ChatbotController = require('../controllers/ChatbotController')
 const AiAuditInsightsController = require('../controllers/AiAuditInsightsController')
+const ProfileController = require('../controllers/profileController')
+const AdminController = require('../controllers/adminController')
 
 const container = awilix.createContainer({
   injectionMode: awilix.InjectionMode.CLASSIC,
@@ -91,6 +95,8 @@ container.register({
   recommendationService: awilix.asClass(RecommendationService).singleton(),
   specialtyService: awilix.asClass(SpecialtyService).singleton(),
   chatbotService: awilix.asClass(ChatbotService).singleton(),
+  profileService: awilix.asClass(ProfileService).singleton(),
+  adminService: awilix.asClass(AdminService).singleton(),
 
   // Controllers
   authController: awilix.asClass(AuthController).singleton(),
@@ -101,6 +107,8 @@ container.register({
   specialtyController: awilix.asClass(SpecialtyController).singleton(),
   chatbotController: awilix.asClass(ChatbotController).singleton(),
   aiAuditInsightsController: awilix.asClass(AiAuditInsightsController).singleton(),
+  profileController: awilix.asClass(ProfileController).singleton(),
+  adminController: awilix.asClass(AdminController).singleton(),
 })
 
 module.exports = container
