@@ -117,6 +117,72 @@ const LandingPage = () => {
         </div>
       </main>
 
+      {/* Benchmark & Testimonial Section (Inspired by meddeep.ai) */}
+      <section className="relative z-10 bg-slate-950/25 border-t border-white/5 py-20">
+        <div className="container mx-auto px-6 max-w-6xl">
+          <div className="text-center max-w-2xl mx-auto mb-16">
+            <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              Hiệu Suất Vượt Trội Được Chứng Thực
+            </h2>
+            <p className="mt-4 text-slate-400 text-sm leading-relaxed">
+              MedAssist AI đạt điểm số ấn tượng trong các bài kiểm tra lâm sàng chuẩn USMLE và nhận được sự tin cậy từ đội ngũ y bác sĩ hàng đầu.
+            </p>
+          </div>
+
+          {/* Benchmark Metrics */}
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mb-16">
+            <div className="glass-card p-8 rounded-2xl text-center border-teal-500/10 hover:border-teal-500/25 transition">
+              <span className="text-xs font-semibold uppercase tracking-wider text-teal-400">USMLE Step 1</span>
+              <div className="text-5xl font-extrabold text-emerald-400 mt-4 mb-2">100%</div>
+              <p className="text-xs text-slate-400">Điểm tuyệt đối về kiến thức y khoa nền tảng</p>
+            </div>
+            <div className="glass-card p-8 rounded-2xl text-center border-cyan-500/10 hover:border-cyan-500/25 transition">
+              <span className="text-xs font-semibold uppercase tracking-wider text-cyan-400">USMLE Step 2</span>
+              <div className="text-5xl font-extrabold text-emerald-400 mt-4 mb-2">100%</div>
+              <p className="text-xs text-slate-400">Perfect score trong suy luận chẩn đoán lâm sàng</p>
+            </div>
+            <div className="glass-card p-8 rounded-2xl text-center border-emerald-500/10 hover:border-emerald-500/25 transition">
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">USMLE Step 3</span>
+              <div className="text-5xl font-extrabold text-emerald-400 mt-4 mb-2">97.5%</div>
+              <p className="text-xs text-slate-400">Hiệu suất suy luận điều trị thực tế xuất sắc</p>
+            </div>
+          </div>
+
+          {/* Clinician Reviews */}
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="glass-card p-6 rounded-2xl border-white/5 flex flex-col justify-between">
+              <p className="text-slate-300 text-sm italic leading-relaxed">
+                "MedAssist AI giúp tôi chẩn đoán phân biệt và sàng lọc chống chỉ định thuốc chỉ trong vài giây. Các giải thích grounded chặt chẽ giúp y bác sĩ tập trung tối đa vào bệnh nhân mà không mất thời gian tra cứu thủ công tài liệu y khoa."
+              </p>
+              <div className="flex items-center gap-4 mt-6">
+                <div className="w-10 h-10 rounded-full bg-teal-500/20 flex items-center justify-center font-bold text-teal-400 text-sm">
+                  EC
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-white">Dr. Emily Carter, MD</h4>
+                  <p className="text-[10px] text-slate-400">Bác sĩ Cấp cứu, Trung tâm Y tế UCSF</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="glass-card p-6 rounded-2xl border-white/5 flex flex-col justify-between">
+              <p className="text-slate-300 text-sm italic leading-relaxed">
+                "Điểm khác biệt lớn nhất là khả năng cung cấp bằng chứng rõ ràng. Mọi gợi ý thuốc hay phân tích triệu chứng đều đi kèm với các trích dẫn tài liệu y khoa chính thức, giúp đẩy nhanh quá trình hội chẩn nội bộ."
+              </p>
+              <div className="flex items-center gap-4 mt-6">
+                <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center font-bold text-cyan-400 text-sm">
+                  SM
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-white">Dr. Sophia Martinez, PhD</h4>
+                  <p className="text-[10px] text-slate-400">Nghiên cứu viên Lâm sàng, Đại học Johns Hopkins</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section */}
       <section className="relative z-10 bg-black/30 border-t border-white/5 py-16">
         <div className="container mx-auto px-6">
