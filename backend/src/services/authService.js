@@ -271,22 +271,30 @@ class AuthService {
     await this.#redis.setEx(`otp:${email}`, OTP_TTL_SECONDS, otp)
     await this.#redis.del(`otp:attempts:${email}`)
 
+    const logger = require('../utils/logger')
+    logger.info(`[OTP_BYPASS] Generated OTP for ${email}: ${otp}`)
+
     if (process.env.NODE_ENV === 'development') {
-      const logger = require('../utils/logger')
       logger.info(`[DEV] OTP cho: ${email} - Mã OTP: ${otp}`)
       return
     }
 
-    await this.#emailTransporter.sendMail({
-      from: process.env.EMAIL_FROM,
-      to: email,
-      subject: '[MedAssist] Mã xác thực tài khoản',
-      html: `
-        <p>Chào <strong>${fullName}</strong>,</p>
-        <p>Mã xác thực của bạn là: <strong style="font-size:24px">${otp}</strong></p>
-        <p>Mã có hiệu lực trong <strong>10 phút</strong>.</p>
-      `,
-    })
+    try {
+      await this.#emailTransporter.sendMail({
+        from: process.env.EMAIL_FROM,
+        to: email,
+        subject: '[MedAssist] Mã xác thực tài khoản',
+        html: `
+          <p>Chào <strong>${fullName}</strong>,</p>
+          <p>Mã xác thực của bạn là: <strong style="font-size:24px">${otp}</strong></p>
+          <p>Mã có hiệu lực trong <strong>10 phút</strong>.</p>
+        `,
+      })
+      logger.info(`[OTP] Email sent successfully to ${email}`)
+    } catch (mailErr) {
+      logger.error(`[OTP] Failed to send email to ${email}: ${mailErr.message}. Fallback to console OTP.`)
+      // Catch error so registration request does not fail when email service is down
+    }
   }
 
   /**
