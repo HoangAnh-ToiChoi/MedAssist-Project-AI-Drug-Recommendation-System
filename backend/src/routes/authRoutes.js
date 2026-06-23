@@ -86,6 +86,24 @@ const resendOtpSchema = Joi.object({
   }),
 })
 
+const googleSchema = Joi.object({
+  idToken: Joi.string().required().messages({
+    'any.required': 'idToken là bắt buộc',
+  }),
+})
+
+const facebookSchema = Joi.object({
+  accessToken: Joi.string().required().messages({
+    'any.required': 'accessToken là bắt buộc',
+  }),
+})
+
+const appleSchema = Joi.object({
+  idToken: Joi.string().required().messages({
+    'any.required': 'idToken là bắt buộc',
+  }),
+})
+
 const authController = container.resolve('authController')
 
 router.post('/register', authLimiter, validate(registerSchema), authController.register.bind(authController))
@@ -96,5 +114,10 @@ router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), aut
 router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword.bind(authController))
 router.post('/refresh', authLimiter, validate(refreshSchema), authController.refresh.bind(authController))
 router.post('/logout', authLimiter, validate(refreshSchema), authController.logout.bind(authController))
+
+// Social Auth Routes
+router.post('/google', authLimiter, validate(googleSchema), authController.googleLogin.bind(authController))
+router.post('/facebook', authLimiter, validate(facebookSchema), authController.facebookLogin.bind(authController))
+router.post('/apple', authLimiter, validate(appleSchema), authController.appleLogin.bind(authController))
 
 module.exports = router

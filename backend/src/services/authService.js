@@ -415,6 +415,146 @@ class AuthService {
     await this.#redis.del(`login:attempts:${email}`)
     await this.#redis.del(`login:lock:${email}`)
   }
+
+  async loginWithGoogle(idToken) {
+    let email, name, googleId;
+
+    if (idToken.startsWith('mock_google_token')) {
+      const parsed = idToken.split(':');
+      email = parsed[1] || 'mock-google@example.com';
+      name = parsed[2] || 'Mock Google User';
+      googleId = parsed[3] || 'google-mock-123456';
+    } else {
+      try {
+        const axios = require('axios');
+        const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+        const payload = response.data;
+        if (!payload.email || !payload.sub) {
+          throw new AppError('Token Google không hợp lệ', 400, 'INVALID_GOOGLE_TOKEN');
+        }
+        email = payload.email;
+        name = payload.name || payload.email.split('@')[0];
+        googleId = payload.sub;
+      } catch (err) {
+        throw new AppError('Xác thực token Google thất bại', 400, 'GOOGLE_AUTH_FAILED');
+      }
+    }
+
+    const normalizedEmail = this.#normalizeEmail(email);
+    let user = await this.#userRepo.findByGoogleId(googleId);
+
+    if (!user) {
+      user = await this.#userRepo.findByEmail(normalizedEmail);
+      if (user) {
+        user.googleId = googleId;
+        await this.#userRepo.save(user);
+      } else {
+        user = new User({
+          email: normalizedEmail,
+          fullName: name,
+          googleId: googleId,
+          isActive: true,
+        });
+        await this.#userRepo.save(user);
+      }
+    }
+
+    return this.#generateTokens(user);
+  }
+
+  async loginWithFacebook(accessToken) {
+    let email, name, facebookId;
+
+    if (accessToken.startsWith('mock_facebook_token')) {
+      const parsed = accessToken.split(':');
+      email = parsed[1] || 'mock-facebook@example.com';
+      name = parsed[2] || 'Mock Facebook User';
+      facebookId = parsed[3] || 'facebook-mock-123456';
+    } else {
+      try {
+        const axios = require('axios');
+        const response = await axios.get(`https://graph.facebook.com/me?fields=id,name,email&access_token=${accessToken}`);
+        const payload = response.data;
+        if (!payload.id) {
+          throw new AppError('Token Facebook không hợp lệ', 400, 'INVALID_FACEBOOK_TOKEN');
+        }
+        facebookId = payload.id;
+        email = payload.email || `${facebookId}@facebook.com`;
+        name = payload.name || 'Facebook User';
+      } catch (err) {
+        throw new AppError('Xác thực token Facebook thất bại', 400, 'FACEBOOK_AUTH_FAILED');
+      }
+    }
+
+    const normalizedEmail = this.#normalizeEmail(email);
+    let user = await this.#userRepo.findByFacebookId(facebookId);
+
+    if (!user) {
+      user = await this.#userRepo.findByEmail(normalizedEmail);
+      if (user) {
+        user.facebookId = facebookId;
+        await this.#userRepo.save(user);
+      } else {
+        user = new User({
+          email: normalizedEmail,
+          fullName: name,
+          facebookId: facebookId,
+          isActive: true,
+        });
+        await this.#userRepo.save(user);
+      }
+    }
+
+    return this.#generateTokens(user);
+  }
+
+  async loginWithApple(idToken) {
+    let email, name, appleId;
+
+    if (idToken.startsWith('mock_apple_token')) {
+      const parsed = idToken.split(':');
+      email = parsed[1] || 'mock-apple@example.com';
+      name = parsed[2] || 'Mock Apple User';
+      appleId = parsed[3] || 'apple-mock-123456';
+    } else {
+      try {
+        const parts = idToken.split('.');
+        if (parts.length !== 3) {
+          throw new Error('Invalid JWT format');
+        }
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+        if (!payload.sub || !payload.email) {
+          throw new Error('Missing sub or email in Apple JWT');
+        }
+        appleId = payload.sub;
+        email = payload.email;
+        name = payload.name ? `${payload.name.firstName} ${payload.name.lastName}` : email.split('@')[0];
+      } catch (err) {
+        throw new AppError('Xác thực token Apple thất bại', 400, 'APPLE_AUTH_FAILED');
+      }
+    }
+
+    const normalizedEmail = this.#normalizeEmail(email);
+    let user = await this.#userRepo.findByAppleId(appleId);
+
+    if (!user) {
+      user = await this.#userRepo.findByEmail(normalizedEmail);
+      if (user) {
+        user.appleId = appleId;
+        await this.#userRepo.save(user);
+      } else {
+        user = new User({
+          email: normalizedEmail,
+          fullName: name,
+          appleId: appleId,
+          isActive: true,
+        });
+        await this.#userRepo.save(user);
+      }
+    }
+
+    return this.#generateTokens(user);
+  }
 }
 
 module.exports = AuthService

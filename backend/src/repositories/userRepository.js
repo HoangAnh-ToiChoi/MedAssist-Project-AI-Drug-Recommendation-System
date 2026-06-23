@@ -19,6 +19,27 @@ class UserRepository {
     )
   }
 
+  async findByGoogleId(googleId) {
+    return this.#findOneBy(
+      'SELECT * FROM users WHERE google_id = $1 AND is_active = true',
+      [googleId]
+    )
+  }
+
+  async findByFacebookId(facebookId) {
+    return this.#findOneBy(
+      'SELECT * FROM users WHERE facebook_id = $1 AND is_active = true',
+      [facebookId]
+    )
+  }
+
+  async findByAppleId(appleId) {
+    return this.#findOneBy(
+      'SELECT * FROM users WHERE apple_id = $1 AND is_active = true',
+      [appleId]
+    )
+  }
+
   async findByEmailIncludingInactive(email) {
     return this.#findOneBy(
       'SELECT * FROM users WHERE email = $1',
@@ -95,10 +116,10 @@ class UserRepository {
   async save(user) {
     if (user.isNew()) {
       const { rows } = await this.#pool.query(
-        `INSERT INTO users (id, email, password_hash, full_name, is_active)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4)
-         RETURNING id, email, full_name, role, is_active, created_at, updated_at`,
-        [user.email, user.passwordHash, user.fullName, user.isActive]
+        `INSERT INTO users (id, email, password_hash, full_name, is_active, google_id, facebook_id, apple_id)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, email, full_name, role, is_active, google_id, facebook_id, apple_id, created_at, updated_at`,
+        [user.email, user.passwordHash, user.fullName, user.isActive, user.googleId, user.facebookId, user.appleId]
       )
 
       const insertedRow = rows[0]
@@ -107,12 +128,17 @@ class UserRepository {
       user.updatedAt = insertedRow.updated_at
       user.role = insertedRow.role
       user.isActive = insertedRow.is_active
+      user.googleId = insertedRow.google_id
+      user.facebookId = insertedRow.facebook_id
+      user.appleId = insertedRow.apple_id
       return user
     }
 
     await this.#pool.query(
-      'UPDATE users SET password_hash = $1, full_name = $2, role = $3, is_active = $4, updated_at = NOW() WHERE id = $5',
-      [user.passwordHash, user.fullName, user.role, user.isActive, user.id]
+      `UPDATE users 
+       SET password_hash = $1, full_name = $2, role = $3, is_active = $4, google_id = $5, facebook_id = $6, apple_id = $7, updated_at = NOW() 
+       WHERE id = $8`,
+      [user.passwordHash, user.fullName, user.role, user.isActive, user.googleId, user.facebookId, user.appleId, user.id]
     )
 
     return user

@@ -84,6 +84,36 @@ class AuthController {
       next(err)
     }
   }
+
+  async googleLogin(req, res, next) {
+    try {
+      const { idToken } = req.body
+      const result = await this.#authService.loginWithGoogle(idToken)
+      res.json(ApiResponse.success(result, 'Đăng nhập Google thành công'))
+    } catch (err) {
+      next(err)
+    }
+  }
+
+  async facebookLogin(req, res, next) {
+    try {
+      const { accessToken } = req.body
+      const result = await this.#authService.loginWithFacebook(accessToken)
+      res.json(ApiResponse.success(result, 'Đăng nhập Facebook thành công'))
+    } catch (err) {
+      next(err)
+    }
+  }
+
+  async appleLogin(req, res, next) {
+    try {
+      const { idToken } = req.body
+      const result = await this.#authService.loginWithApple(idToken)
+      res.json(ApiResponse.success(result, 'Đăng nhập Apple thành công'))
+    } catch (err) {
+      next(err)
+    }
+  }
 }
 
 module.exports = AuthController
