@@ -33,8 +33,8 @@ Hệ thống ưu tiên dữ liệu grounded và business rules ở backend. LLM 
 
 ## Tài khoản demo
 
-- User: `demo.medassist@example.com` / `Demo@12345`
-- Admin: `admin.medassist@example.com` / `Admin@12345`
+- User: `demo.medassist@example.com` / `password123`
+- Admin: `admin.medassist@example.com` / `password123`
 
 ## Chạy nhanh local
 
