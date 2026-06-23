@@ -74,6 +74,12 @@ const DrugSuggestion = () => {
     return name.includes('khó thở') || name.includes('đau ngực') || name.includes('sốt cao') || name.includes('ngất');
   }) || false;
   const specialtyLabel = SPECIALTY_LABELS[meta?.specialty] || meta?.specialty || 'Chưa chọn';
+  const hasChatbot = recommendations.length > 0;
+
+  const scrollToChatbot = () => {
+    const section = document.getElementById('grounded-chatbot');
+    section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div className="relative min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col font-sans">
@@ -156,6 +162,26 @@ const DrugSuggestion = () => {
           </section>
         )}
 
+        {hasChatbot && (
+          <div className="glass-card rounded-2xl border border-teal-500/10 bg-teal-500/5 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-100">Chatbot giải thích kết quả đã sẵn sàng</h3>
+                <p className="text-xs leading-relaxed text-slate-400">
+                  Sau khi xem disease candidates và thuốc đã qua bộ lọc, bạn có thể hỏi thêm lý do gợi ý, cảnh báo an toàn hoặc thời điểm cần đi khám.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={scrollToChatbot}
+                className="btn-gradient rounded-xl px-4 py-2.5 text-xs font-semibold whitespace-nowrap"
+              >
+                Mở chatbot grounded
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Warning Alerts */}
         {(dangerAlert || hasDangerousSymptom) && (
           <MedicalAlert type="danger" title="Cảnh báo triệu chứng nguy hiểm">
@@ -211,6 +237,16 @@ const DrugSuggestion = () => {
           </div>
         )}
       </div>
+
+      {hasChatbot && (
+        <button
+          type="button"
+          onClick={scrollToChatbot}
+          className="fixed bottom-6 right-6 z-20 rounded-full border border-teal-400/30 bg-[#0F172A]/95 px-4 py-3 text-xs font-semibold text-teal-200 shadow-[0_20px_60px_rgba(45,212,191,0.18)] backdrop-blur transition hover:border-teal-300/50 hover:text-white"
+        >
+          Chatbot AI
+        </button>
+      )}
     </div>
   );
 };

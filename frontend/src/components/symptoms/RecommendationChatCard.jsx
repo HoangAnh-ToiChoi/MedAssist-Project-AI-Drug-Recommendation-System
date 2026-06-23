@@ -81,7 +81,10 @@ const RecommendationChatCard = ({
   };
 
   return (
-    <section className="glass-card rounded-2xl border-white/5 p-5 space-y-4">
+    <section
+      id="grounded-chatbot"
+      className="glass-card rounded-2xl border-white/5 p-5 space-y-4 scroll-mt-24"
+    >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-bold text-slate-100">Chatbot grounded theo kết quả hiện tại</h3>

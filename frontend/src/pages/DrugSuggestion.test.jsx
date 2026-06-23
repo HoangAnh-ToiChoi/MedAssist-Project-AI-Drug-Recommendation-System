@@ -61,6 +61,8 @@ test('renders disease-first hierarchy from stored result', async () => {
   expect(screen.getByText(/triệu chứng khớp/i)).toBeInTheDocument()
   expect(screen.getByText(/giải thích gợi ý/i)).toBeInTheDocument()
   expect(screen.getByText(/chatbot grounded theo kết quả hiện tại/i)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /mở chatbot grounded/i })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /chatbot ai/i })).toBeInTheDocument()
   expect(screen.getByText(/provider: gemini/i)).toBeInTheDocument()
 })
 
