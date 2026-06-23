@@ -18,12 +18,27 @@ const app = express()
 
 const allowedOrigin = (origin, callback) => {
   if (!origin) return callback(null, true)
-  if (process.env.NODE_ENV === 'development' && /^http:\/\/localhost:\d+$/.test(origin)) {
+  
+  // Allow localhost (development & hybrid testing)
+  if (/^http:\/\/localhost:\d+$/.test(origin)) {
     return callback(null, true)
   }
-  if (origin === (process.env.FRONTEND_URL || 'http://localhost:5173')) {
+  
+  // Allow configured frontend URL
+  if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
     return callback(null, true)
   }
+  
+  // Allow fallback frontend port
+  if (origin === 'http://localhost:5173') {
+    return callback(null, true)
+  }
+  
+  // Allow all Vercel subdomains (for production & preview URLs)
+  if (/\.vercel\.app$/.test(origin)) {
+    return callback(null, true)
+  }
+  
   callback(new Error('Not allowed by CORS'))
 }
 
