@@ -1,8 +1,8 @@
-﻿// Cau hinh Axios va interceptors cho toan bo ung dung MedAssist
+// Cau hinh Axios va interceptors cho toan bo ung dung MedAssist
 import axios from 'axios'
 
-// Base URL lay tu bien moi truong, fallback ve localhost
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+// Base URL lay tu bien moi truong, fallback ve proxy path '/api/v1'
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 // Tao instance axios voi cau hinh mac dinh
 const api = axios.create({
@@ -54,8 +54,13 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
+    // Khong tu dong xử lý refresh/redirect cho các API auth (login, register, refresh)
+    const isAuthRoute = originalRequest.url?.includes('/auth/login') || 
+                        originalRequest.url?.includes('/auth/register') || 
+                        originalRequest.url?.includes('/auth/refresh')
+
     // Xu ly 401 Unauthorized: thu refresh token
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !isAuthRoute && !originalRequest._retry) {
       if (isRefreshing) {
         // Dang refresh token - xep request vao hang cho
         return new Promise((resolve, reject) => {
@@ -82,7 +87,11 @@ api.interceptors.response.use(
       }
 
       try {
-        const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+        const refreshUrl = API_BASE_URL.startsWith('http')
+          ? `${API_BASE_URL}/auth/refresh`
+          : `${API_BASE_URL}/auth/refresh`
+
+        const response = await axios.post(refreshUrl, {
           refreshToken,
         })
 

@@ -1,0 +1,24 @@
+const ApiResponse = require('../utils/ApiResponse')
+
+class RecommendationController {
+  #recommendationService
+
+  constructor(recommendationService) {
+    this.#recommendationService = recommendationService
+  }
+
+  async check(req, res, next) {
+    try {
+      const result = await this.#recommendationService.checkSymptoms(
+        req.user.id,
+        req.body.specialty,
+        req.body.symptoms,
+      )
+      res.json(ApiResponse.success(result, 'Gợi ý thuốc thành công'))
+    } catch (err) {
+      next(err)
+    }
+  }
+}
+
+module.exports = RecommendationController

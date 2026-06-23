@@ -1,6 +1,6 @@
-﻿import React, { forwardRef } from 'react'
+import React, { forwardRef } from 'react'
 
-// Input field tai su dung voi label va error message
+// Input field tai su dung voi label va error message (Dark Medical Theme)
 const Input = forwardRef(({
   label,
   error,
@@ -14,27 +14,27 @@ const Input = forwardRef(({
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
           {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
+          {required && <span className="text-rose-500 ml-1">*</span>}
         </label>
       )}
       <input
         ref={ref}
         type={type}
         placeholder={placeholder}
-        className={`w-full border rounded-lg px-3 py-2 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 ${
+        className={`w-full bg-slate-950/40 border rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-transparent ${
           error
-            ? 'border-red-400 focus:ring-red-400 bg-red-50'
-            : 'border-gray-300 focus:ring-primary focus:border-primary'
+            ? 'border-rose-500/50 focus:ring-rose-500/40 bg-rose-500/5'
+            : 'border-slate-800 focus:ring-teal-500/40'
         } ${className}`}
         {...props}
       />
       {error && (
-        <p className="mt-1 text-xs text-red-600">{error}</p>
+        <p className="mt-1.5 text-xs text-rose-400 font-semibold">{error}</p>
       )}
       {hint && !error && (
-        <p className="mt-1 text-xs text-gray-500">{hint}</p>
+        <p className="mt-1.5 text-xs text-slate-500">{hint}</p>
       )}
     </div>
   )

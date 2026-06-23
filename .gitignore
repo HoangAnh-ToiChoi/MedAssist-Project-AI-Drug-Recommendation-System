@@ -31,3 +31,18 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Git worktrees
+.worktrees/
+
+# Crawled CSV output (data có thể tái tạo, không commit)
+data/crawled/*.csv
+data/crawled/**/*.csv
+data/crawled/**/*.sql
+data/crawled/**/*.json
+
+# Claude, Codegraph, Cursor files
+.claude/
+.codegraph/
+.cursor/
+

@@ -1,0 +1,122 @@
+name: MedAssist CI
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+    branches:
+      - dev
+      - main
+
+jobs:
+  data_pipeline:
+    name: Data Pipeline Guardrails
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Check disease graph scripts syntax
+        run: |
+          node --check scripts/seed-disease-graph-data.js
+          node --check scripts/check-disease-graph-pipeline.js
+          node --check scripts/check-ai-observability.js
+
+      - name: Run offline disease graph guardrail check
+        run: node scripts/check-disease-graph-pipeline.js
+
+      - name: Run AI observability guardrail check
+        run: node scripts/check-ai-observability.js
+
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run backend tests
+        run: npm test
+
+  frontend:
+    name: Frontend Tests And Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm run test
+
+      - name: Build frontend
+        run: npm run build
+
+  ai_service:
+    name: AI Service Tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ai-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run ai-service tests
+        env:
+          RUN_LIVE_AI_TESTS: "0"
+        run: pytest -q

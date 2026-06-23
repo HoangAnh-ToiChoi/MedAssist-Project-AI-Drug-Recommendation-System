@@ -1,81 +1,194 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react';
+import api from '../../services/api';
+import SymptomChip from './SymptomChip';
 
-// Danh sách triệu chứng mẫu — sẽ được load từ API sau
-const COMMON_SYMPTOMS = [
-  'Đau đầu', 'Sốt', 'Ho', 'Đau họng', 'Sổ mũi', 'Mệt mỏi',
-  'Đau bụng', 'Buồn nôn', 'Tiêu chảy', 'Chóng mặt', 'Khó thở',
-  'Đau ngực', 'Đau lưng', 'Phát ban', 'Ngứa', 'Mất ngủ',
-  'Đau khớp', 'Sưng phù', 'Chán ăn', 'Đổ mồ hôi đêm',
-]
+const CATEGORY_MAP = {
+  'Toàn thân': ['sot', 'met_moi', 'sut_can', 'chong_mat', 'mat_ngu', 'sung_phu', 'roi_loan_tieu_tien'],
+  'Hô hấp': ['ho', 'ho_co_dom', 'chay_mui', 'kho_tho'],
+  'Tiêu hóa': ['buon_non', 'tieu_chay', 'tao_bon', 'dau_bung', 'an_khong_ngon'],
+  'Đau nhức': ['dau_dau', 'dau_hong', 'dau_khop', 'dau_lung', 'dau_nguc'],
+  'Da liễu': ['phat_ban', 'ngua', 'noi_mu', 'noi_mun']
+};
 
-// Component chọn triệu chứng với tìm kiếm và tag
-const SymptomSelector = ({ selected, onAdd, onRemove }) => {
-  const [search, setSearch] = useState('')
+const SymptomSelector = ({ specialty = '', selected = [], onAdd, onRemove }) => {
+  const [symptoms, setSymptoms] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
 
-  const filtered = COMMON_SYMPTOMS.filter(
-    (s) => s.toLowerCase().includes(search.toLowerCase()) && !selected.includes(s)
-  )
+  useEffect(() => {
+    if (!specialty) {
+      setSymptoms([]);
+      setLoading(false);
+      setError('');
+      setSearch('');
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchSymptoms = async () => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response = await api.get(`/specialties/${encodeURIComponent(specialty)}/symptoms`);
+        const data = response.data?.data || response.data || [];
+
+        if (isMounted) {
+          setSymptoms(data);
+        }
+      } catch (err) {
+        console.error(err);
+        if (isMounted) {
+          setSymptoms([]);
+          setError('Không thể tải danh sách triệu chứng theo chuyên khoa. Vui lòng thử lại sau.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchSymptoms();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [specialty]);
+
+  const getSymptomCategory = (symptom) => {
+    const code = String(symptom?.code || '').toLowerCase();
+    for (const [category, codes] of Object.entries(CATEGORY_MAP)) {
+      if (codes.includes(code)) return category;
+    }
+    return 'Khác';
+  };
+
+  const handleChipClick = (symptomName) => {
+    if (selected.includes(symptomName)) {
+      onRemove(symptomName);
+    } else {
+      onAdd(symptomName);
+    }
+  };
+
+  // Filter symptoms based on search query
+  const filteredSymptoms = symptoms.filter((s) => {
+    if (!s || !s.name) return false;
+    const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase());
+    return matchesSearch;
+  });
+
+  if (!specialty) {
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+            Tìm kiếm triệu chứng nhanh
+          </label>
+        </div>
+        <div className="border border-slate-800 bg-slate-950/30 rounded-xl px-4 py-5 text-sm text-slate-400">
+          Chọn chuyên khoa trước để hệ thống hiển thị danh sách triệu chứng phù hợp.
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 space-y-3">
+        <svg className="animate-spin h-8 w-8 text-teal-400" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <span className="text-sm text-slate-500 font-medium">Đang tải danh mục triệu chứng theo chuyên khoa...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-rose-400 text-center py-6 border border-rose-500/10 bg-rose-500/5 rounded-xl text-sm font-medium">
+        {error}
+      </div>
+    );
+  }
+
+  // Group symptoms
+  const grouped = {};
+  filteredSymptoms.forEach((symptom) => {
+    const cat = getSymptomCategory(symptom);
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(symptom);
+  });
+
+  // Category order
+  const categoryOrder = ['Toàn thân', 'Hô hấp', 'Tiêu hóa', 'Đau nhức', 'Da liễu', 'Khác'];
 
   return (
-    <div className="space-y-4">
-      {/* Ô tìm kiếm triệu chứng */}
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="Tìm triệu chứng..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-        />
-        <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
+    <div className="space-y-6">
+      {/* Search Bar */}
+      <div className="space-y-2">
+        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Tìm kiếm triệu chứng nhanh</label>
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Ví dụ: sốt, đau đầu, ho, tiêu chảy..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input-field pl-10 text-sm py-2.5"
+          />
+          <svg className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
       </div>
 
-      {/* Danh sách triệu chứng có thể chọn */}
-      <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-        {filtered.map((symptom) => (
-          <button
-            key={symptom}
-            onClick={() => { onAdd(symptom); setSearch('') }}
-            className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-secondary hover:text-white transition-colors duration-200"
-          >
-            + {symptom}
-          </button>
-        ))}
-        {filtered.length === 0 && search && (
-          <button
-            onClick={() => { onAdd(search); setSearch('') }}
-            className="px-3 py-1 bg-blue-50 text-secondary border border-secondary rounded-full text-sm hover:bg-secondary hover:text-white transition-colors"
-          >
-            + Thêm "{search}"
-          </button>
-        )}
-      </div>
-
-      {/* Triệu chứng đã chọn */}
-      {selected.length > 0 && (
-        <div>
-          <p className="text-xs text-gray-500 mb-2">Đã chọn ({selected.length}):</p>
-          <div className="flex flex-wrap gap-2">
-            {selected.map((symptom) => (
-              <span
-                key={symptom}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-primary text-white rounded-full text-sm"
-              >
-                {symptom}
-                <button onClick={() => onRemove(symptom)} className="hover:text-red-200 transition-colors">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </span>
-            ))}
-          </div>
+      {filteredSymptoms.length === 0 && (
+        <div className="text-center py-6 border border-slate-800 bg-slate-950/30 rounded-xl text-sm text-slate-400">
+          {symptoms.length === 0
+            ? 'Chưa có triệu chứng nào cho chuyên khoa này.'
+            : 'Không tìm thấy triệu chứng phù hợp với từ khóa bạn nhập.'}
         </div>
       )}
-    </div>
-  )
-}
 
-export default SymptomSelector
+      {/* Grouped Lists */}
+      <div className="space-y-5">
+        {categoryOrder.map((category) => {
+          const list = grouped[category] || [];
+          if (list.length === 0) return null;
+
+          return (
+            <div key={category} className="space-y-2">
+              <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-1 h-3.5 bg-teal-500 rounded-full"></span>
+                {category}
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {list.map((symptom) => (
+                  <SymptomChip
+                    key={symptom.id || symptom.name}
+                    name={symptom.name}
+                    selected={selected.includes(symptom.name)}
+                    onClick={() => handleChipClick(symptom.name)}
+                    icon={
+                      category === 'Toàn thân' ? '🌡️' :
+                      category === 'Hô hấp' ? '🫁' :
+                      category === 'Tiêu hóa' ? '🤢' :
+                      category === 'Đau nhức' ? '🤕' :
+                      category === 'Da liễu' ? '🩹' : '•'
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default SymptomSelector;

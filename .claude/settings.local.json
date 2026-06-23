@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(git stash *)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "mcp__notebooklm__ask_question",
+      "Bash(node server.js)",
+      "Bash(git -C \"d:\\\\WorkSpace\\\\MedAssist Project\" pull origin feature/CHCKNSPC-38-KHOA-ui-dang-ky)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Skill(superpowers:writing-plans)",
+      "Bash(node -e \"const R = require\\('./backend/src/repositories/RecommendationRepository'\\); console.log\\('OK:', typeof R\\)\")",
+      "Bash(node -e \"const S = require\\('./src/services/RecommendationService'\\); console.log\\('OK:', typeof S\\)\")"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "scrape:more": "node scripts/scrape-more-medical-data.js",
+    "seed:disease-graph": "node scripts/seed-disease-graph-data.js",
+    "check:disease-graph-pipeline": "node scripts/check-disease-graph-pipeline.js",
+    "check:ai-observability": "node scripts/check-ai-observability.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
+    "axios": "^1.16.1",
+    "cheerio": "^1.2.0",
+    "csv-writer": "^1.6.0"
+  }
+}
