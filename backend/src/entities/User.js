@@ -1,5 +1,5 @@
 class User {
-  constructor({ id, email, passwordHash, fullName, role, isActive, createdAt, updatedAt, dateOfBirth, gender, phoneNumber }) {
+  constructor({ id, email, passwordHash, fullName, role, isActive, createdAt, updatedAt, dateOfBirth, gender, phoneNumber, googleId, facebookId, appleId }) {
     this.id = id
     this.email = email
     this.passwordHash = passwordHash
@@ -11,6 +11,9 @@ class User {
     this.dateOfBirth = dateOfBirth
     this.gender = gender
     this.phoneNumber = phoneNumber
+    this.googleId = googleId
+    this.facebookId = facebookId
+    this.appleId = appleId
   }
 
   isNew() {
@@ -73,6 +76,9 @@ class User {
       dateOfBirth: row.date_of_birth,
       gender: row.gender,
       phoneNumber: row.phone_number,
+      googleId: row.google_id,
+      facebookId: row.facebook_id,
+      appleId: row.apple_id,
     })
   }
 }
