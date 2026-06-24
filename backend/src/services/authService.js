@@ -444,9 +444,10 @@ class AuthService {
     let user = await this.#userRepo.findByGoogleId(googleId);
 
     if (!user) {
-      user = await this.#userRepo.findByEmail(normalizedEmail);
+      user = await this.#userRepo.findByEmailIncludingInactive(normalizedEmail);
       if (user) {
         user.googleId = googleId;
+        user.activate();
         await this.#userRepo.save(user);
       } else {
         user = new User({
@@ -491,9 +492,10 @@ class AuthService {
     let user = await this.#userRepo.findByFacebookId(facebookId);
 
     if (!user) {
-      user = await this.#userRepo.findByEmail(normalizedEmail);
+      user = await this.#userRepo.findByEmailIncludingInactive(normalizedEmail);
       if (user) {
         user.facebookId = facebookId;
+        user.activate();
         await this.#userRepo.save(user);
       } else {
         user = new User({
@@ -540,9 +542,10 @@ class AuthService {
     let user = await this.#userRepo.findByAppleId(appleId);
 
     if (!user) {
-      user = await this.#userRepo.findByEmail(normalizedEmail);
+      user = await this.#userRepo.findByEmailIncludingInactive(normalizedEmail);
       if (user) {
         user.appleId = appleId;
+        user.activate();
         await this.#userRepo.save(user);
       } else {
         user = new User({
