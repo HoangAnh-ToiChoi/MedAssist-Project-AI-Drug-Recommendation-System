@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
+  const { setUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -44,6 +46,7 @@ const Login = () => {
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
+      setUser(user);
       navigate('/dashboard');
     } catch (err) {
       if (err.response) {
@@ -111,6 +114,7 @@ const Login = () => {
           localStorage.setItem('accessToken', accessToken);
           localStorage.setItem('refreshToken', refreshToken);
           localStorage.setItem('user', JSON.stringify(user));
+          setUser(user);
           
           // Clear query/hash params from the address bar
           window.history.replaceState({}, document.title, window.location.pathname);
@@ -175,6 +179,7 @@ const Login = () => {
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
+      setUser(user);
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || `Đăng nhập bằng ${provider} thất bại. Vui lòng thử lại.`);
